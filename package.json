@@ -1,0 +1,29 @@
+{
+  "name": "gh-contrib-archive",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 43147",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1 --port 43147",
+    "lint": "eslint",
+    "ingest": "tsx scripts/ingest.ts",
+    "sanity": "tsx scripts/sanity-report.ts"
+  },
+  "dependencies": {
+    "next": "16.3.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
+    "tailwindcss": "^4",
+    "tsx": "^4.20.5",
+    "typescript": "^5"
+  }
+}
