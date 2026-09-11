@@ -1,18 +1,22 @@
 # GitHub contribution archive
 
-SQLite archive of [**@kvnloo**](https://github.com/kvnloo) GitHub history: issues, pull requests, issue/PR comments, discussion posts, reviews, and inline review comments. Records store **links plus a short excerpt** — not patches or file diffs.
+Visualization of [**@kvnloo**](https://github.com/kvnloo) GitHub history: issues, pull requests, comments, discussions, reviews, and **commit counts**.
+
+## Privacy
+
+The website is public-safe:
+
+- **Public** repos: links and short excerpts (not diffs).
+- **Private** repos: the row exists (type + date) with no title, message, repo name, SHA, or URL.
+- **Private commits**: yearly totals only. Public commits link to GitHub’s `commits?author=` list, not to patches.
+
+`data/github.db` is the local full archive (gitignored). `data/public.db` is what the site reads and what this repo ships.
 
 ## Run
 
 ```bash
-export GH_TOKEN=...          # GitHub token with read access
+export GH_TOKEN=...          # needs repo read to classify private vs public
 npm install
-npm run ingest               # newest-first GraphQL pull, then older pages
+npm run ingest               # pull + classify + write public.db
 npm run dev                  # http://127.0.0.1:43147
 ```
-
-`data/github.db` is the database. Re-run ingest anytime; rows upsert by GraphQL node id.
-
-## Sanity flags
-
-Ingest scores each row for empty bodies, Cursor/Copilot markers, KEEP/CHECK agent templates, generic LLM filler, near-duplicates, and acknowledgement-only comments. Filter them in the UI (`agent_marker`, `generic_ai_slop`, …).

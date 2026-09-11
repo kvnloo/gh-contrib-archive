@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { excerptOf, flagContribution, flagDuplicates } from "../lib/sanity";
-import { openDb } from "../lib/db";
+import { openDb, PRIVATE_DB_PATH } from "../lib/db";
 
 const LOGIN = process.env.GH_LOGIN ?? "kvnloo";
 const TOKEN = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
@@ -46,19 +46,21 @@ function upsert(
     created_at: string;
     updated_at?: string | null;
     extra?: unknown;
+    visibility?: string;
   },
 ) {
   const excerpt = excerptOf(row.body);
   db.prepare(
     `INSERT INTO contributions (
       id, github_node_id, type, url, html_url, repo, number, title, excerpt,
-      body_chars, state, created_at, updated_at, ingested_at, extra_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+      body_chars, state, visibility, created_at, updated_at, ingested_at, extra_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
     ON CONFLICT(id) DO UPDATE SET
       title=excluded.title,
       excerpt=excluded.excerpt,
       body_chars=excluded.body_chars,
       state=excluded.state,
+      visibility=excluded.visibility,
       updated_at=excluded.updated_at,
       ingested_at=datetime('now'),
       extra_json=excluded.extra_json`,
@@ -74,6 +76,7 @@ function upsert(
     excerpt,
     (row.body ?? "").length,
     row.state ?? null,
+    row.visibility ?? "unknown",
     row.created_at,
     row.updated_at ?? null,
     row.extra ? JSON.stringify(row.extra) : null,
@@ -451,7 +454,7 @@ function printSanity(db: DatabaseSync) {
 }
 
 async function main() {
-  const db = openDb();
+  const db = openDb(PRIVATE_DB_PATH);
   db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)").run("login", LOGIN);
   db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)").run(
     "started_at",

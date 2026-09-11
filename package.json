@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 43147",
     "lint": "eslint",
-    "ingest": "tsx scripts/ingest.ts",
+    "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts",
+    "privacy": "tsx scripts/privacy-sync.ts",
     "sanity": "tsx scripts/sanity-report.ts"
   },
   "dependencies": {

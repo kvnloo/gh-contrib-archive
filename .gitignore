@@ -33,7 +33,8 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# sqlite sidecars (commit data/github.db)
+# local full archive (private titles/excerpts) — never commit
+data/github.db
 data/*.db-wal
 data/*.db-shm
 data/*.db-journal
