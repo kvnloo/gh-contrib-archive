@@ -1,5 +1,12 @@
-import StubWorld from "@/components/worlds/StubWorld";
+"use client";
+
+import PhaseScene from "@/components/worlds/phase/Scene";
+import { WorldChrome } from "@/components/worlds/WorldChrome";
 
 export default function Page() {
-  return <StubWorld title="Phase" hint="World branch will spin the two clocks here." />;
+  return (
+    <WorldChrome title="Phase">
+      <PhaseScene />
+    </WorldChrome>
+  );
 }
