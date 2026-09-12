@@ -45,3 +45,6 @@ data/*.db-journal
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# dream-loop working files
+.dream-loop/

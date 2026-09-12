@@ -95,7 +95,8 @@ export default async function Home({
         <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">GitHub contribution archive</p>
         <h1 className="text-3xl font-semibold tracking-tight">Everything @kvnloo left on GitHub</h1>
         <p className="max-w-3xl text-sm leading-6 text-zinc-400">
-          Public issues, PRs, and comments are linked. Private repositories only appear as a count
+          <a href="/worlds" className="text-sky-300 hover:underline">Five graph worlds</a>
+          {' '}· public issues, PRs, and comments are linked. Private repositories only appear as a count
           and a date — no titles, messages, diffs, or URLs. Same for commits: public commit lists
           go to GitHub; private commits are a yearly total.
         </p>
