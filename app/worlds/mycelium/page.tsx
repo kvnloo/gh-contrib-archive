@@ -1,5 +1,5 @@
-import StubWorld from "@/components/worlds/StubWorld";
+import MyceliumScene from "@/components/worlds/mycelium/Scene";
 
 export default function Page() {
-  return <StubWorld title="Mycelium" hint="World branch will grow the living hyphae here." />;
+  return <MyceliumScene />;
 }
