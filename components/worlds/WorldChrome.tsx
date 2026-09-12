@@ -4,13 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export const WORLDS = [
-  { id: "mycelium", title: "Mycelium", keys: "1" },
-  { id: "night", title: "Black Marble", keys: "2" },
-  { id: "phase", title: "Phase", keys: "3" },
-  { id: "metro", title: "Metro", keys: "4" },
-  { id: "constellation", title: "Constellation", keys: "5" },
-] as const;
+import { WORLDS } from "@/components/worlds/catalog";
 
 export function WorldChrome({ children, title }: { children: React.ReactNode; title: string }) {
   const path = usePathname();

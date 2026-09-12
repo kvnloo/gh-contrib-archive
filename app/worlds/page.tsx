@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { WORLDS } from "@/components/worlds/WorldChrome";
+import { WORLDS } from "@/components/worlds/catalog";
 
 export default function WorldsHub() {
   return (
