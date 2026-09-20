@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 43147",
+    "prebuild": "npm run export:public",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 43147",
     "lint": "eslint",
-    "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts",
+    "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts && npm run export:public",
     "privacy": "tsx scripts/privacy-sync.ts",
     "export:public": "tsx scripts/export-public.ts",
     "sanity": "tsx scripts/sanity-report.ts",
