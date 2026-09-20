@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs";
+import fs from "node:fs";\nimport { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { openDb } from "./db.ts";
 
@@ -159,7 +159,7 @@ function hashJson(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-function metaValue(db: ReturnType<typeof openDb>, key: string) {
+function metaValue(db: DatabaseSync, key: string) {
   const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
     | { value: string }
     | undefined;
@@ -258,7 +258,7 @@ function buildEdges(
 }
 
 export function compilePublicSnapshot(dbPath: string): CompiledPublicSnapshot {
-  const db = openDb(dbPath);
+  const db = new DatabaseSync(dbPath);
   try {
     const rows = db
       .prepare(
