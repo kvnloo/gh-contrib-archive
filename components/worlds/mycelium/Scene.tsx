@@ -2,6 +2,7 @@
 
 import { WorldChrome } from "@/components/worlds/WorldChrome";
 import { useWorldGraph, type Graph } from "@/components/worlds/useWorldGraph";
+import { publicAssetPath } from "@/lib/public-path";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -53,7 +54,7 @@ type PublicItem = {
   kind: string;
 };
 
-const TEX = "/textures/mycelium";
+const TEX = publicAssetPath("/textures/mycelium");
 
 function isItem(n: GraphNode) {
   return n.type === "issue" || n.type === "pull_request";
