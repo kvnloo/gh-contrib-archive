@@ -1,5 +1,3 @@
-import type { PublicArchiveItem } from "./public-snapshot";
-
 export type ArchiveFilters = {
   type?: string;
   flag?: string;
@@ -8,11 +6,39 @@ export type ArchiveFilters = {
   year?: string;
 };
 
-function isPublic(item: PublicArchiveItem): item is Extract<PublicArchiveItem, { visibility: "public" }> {
+export type FilterableArchiveItem =
+  | {
+      id: string;
+      type: string;
+      visibility: "public";
+      url: string;
+      repo: string | null;
+      number: number | null;
+      title: string | null;
+      excerpt: string | null;
+      body_chars: number;
+      state: string | null;
+      created_at: string;
+      updated_at: string | null;
+      flags: { code: string; severity: string; detail: string }[];
+    }
+  | {
+      id: string;
+      type: string;
+      visibility: "private";
+      created_at: string;
+    };
+
+function isPublic(
+  item: FilterableArchiveItem,
+): item is Extract<FilterableArchiveItem, { visibility: "public" }> {
   return item.visibility === "public";
 }
 
-export function filterArchiveItems(items: PublicArchiveItem[], filters: ArchiveFilters) {
+export function filterArchiveItems(
+  items: FilterableArchiveItem[],
+  filters: ArchiveFilters,
+) {
   const repoNeedle = filters.repo?.trim().toLowerCase();
   const queryNeedle = filters.q?.trim().toLowerCase();
 
@@ -46,7 +72,7 @@ export function filterArchiveItems(items: PublicArchiveItem[], filters: ArchiveF
 }
 
 export function pageArchiveItems(
-  items: PublicArchiveItem[],
+  items: FilterableArchiveItem[],
   filters: ArchiveFilters,
   requestedPage: number,
   limit: number,
