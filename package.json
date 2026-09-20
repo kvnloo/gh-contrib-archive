@@ -9,6 +9,7 @@
     "lint": "eslint",
     "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts",
     "privacy": "tsx scripts/privacy-sync.ts",
+    "export:public": "tsx scripts/export-public.ts",
     "sanity": "tsx scripts/sanity-report.ts",
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
