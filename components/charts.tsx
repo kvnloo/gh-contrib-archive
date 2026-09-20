@@ -1,3 +1,5 @@
+import { publicAssetPath } from "@/lib/public-path";
+
 export function HBars({
   rows,
   hrefFor,
@@ -23,7 +25,8 @@ export function HBars({
             </div>
           </>
         );
-        const href = r.href ?? hrefFor?.(r.label);
+        const rawHref = r.href ?? hrefFor?.(r.label);
+        const href = rawHref ? publicAssetPath(rawHref) : undefined;
         return (
           <li key={r.label}>
             {href ? (
@@ -51,7 +54,7 @@ export function YearBars({
       {rows.map((r) => (
         <a
           key={r.year}
-          href={`/?year=${r.year}`}
+          href={publicAssetPath(`/?year=${r.year}`)}
           className="group flex min-w-10 flex-1 flex-col items-center gap-2"
           title={`${r.year}: ${r.n}`}
         >

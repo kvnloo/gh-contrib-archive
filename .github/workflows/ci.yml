@@ -11,6 +11,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,3 +22,10 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Verify static export contract
+        run: |
+          test -f out/index.html
+          test -f out/worlds/index.html
+          test -f out/world-graph.json
+          test -f out/data/archive.json
+          test -f out/data/manifest.json

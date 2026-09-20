@@ -5,7 +5,8 @@ const basePath = normalizePublicBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
 
 const nextConfig: NextConfig = {
   basePath,
-  serverExternalPackages: ["node:sqlite"],
+  output: "export",
+  trailingSlash: true,
 };
 
 export default nextConfig;
