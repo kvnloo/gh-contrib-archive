@@ -1,5 +1,6 @@
 "use client";
 
+import { publicAssetPath } from "@/lib/public-path";
 import { useEffect, useState } from "react";
 
 export type Graph = {
@@ -18,7 +19,7 @@ export function useWorldGraph() {
   const [graph, setGraph] = useState<Graph | null>(cache);
   useEffect(() => {
     if (cache) return;
-    fetch("/world-graph.json")
+    fetch(publicAssetPath("/world-graph.json"))
       .then((r) => r.json())
       .then((g: Graph) => {
         cache = g;
