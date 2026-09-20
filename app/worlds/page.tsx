@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WORLDS } from "@/components/worlds/catalog";
+import { publicAssetPath } from "@/lib/public-path";
 
 export default function WorldsHub() {
   return (
@@ -19,7 +20,7 @@ export default function WorldsHub() {
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/dream-targets/target-${w.id === "night" ? "night" : w.id}.png`}
+                  src={publicAssetPath(`/dream-targets/target-${w.id === "night" ? "night" : w.id}.png`)}
                   alt=""
                   className="aspect-video w-full object-cover"
                 />
