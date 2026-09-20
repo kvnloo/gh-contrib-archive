@@ -20,6 +20,10 @@
 # production
 /build
 
+# generated public web snapshot (rebuilt from data/public.db)
+public/data/
+public/world-graph.json
+
 # misc
 .DS_Store
 *.pem
