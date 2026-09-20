@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs";\nimport { DatabaseSync } from "node:sqlite";
+import fs from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
-import { openDb } from "./db.ts";
 
 export const PUBLIC_SNAPSHOT_SCHEMA = 1 as const;
 
