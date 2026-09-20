@@ -432,7 +432,7 @@ export function compilePublicSnapshot(dbPath: string): CompiledPublicSnapshot {
         };
       }
 
-      const node: PublicWorldNode = {
+      const node: Extract<PublicWorldNode, { visibility: "public" }> = {
         id: row.id,
         type: row.type,
         created: row.created_at,
