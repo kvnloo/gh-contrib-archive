@@ -400,7 +400,7 @@ export function compilePublicSnapshot(dbPath: string): CompiledPublicSnapshot {
       (
         db
           .prepare(
-            "SELECT MAX(COALESCE(NULLIF(updated_at, ''), created_at)) AS value FROM contributions",
+            "SELECT MAX(created_at) AS value FROM contributions",
           )
           .get() as { value: string | null }
       ).value,
@@ -410,12 +410,12 @@ export function compilePublicSnapshot(dbPath: string): CompiledPublicSnapshot {
       schemaVersion: PUBLIC_SNAPSHOT_SCHEMA,
       privacy: "public-safe",
       generatedAt: lastCheckedAt,
-      stats,
-      byType,
-      byYear,
-      byMonth,
-      byRepo,
-      byFlag,
+      stats: { ...stats },
+      byType: byType.map((row) => ({ ...row })),
+      byYear: byYear.map((row) => ({ ...row })),
+      byMonth: byMonth.map((row) => ({ ...row })),
+      byRepo: byRepo.map((row) => ({ ...row })),
+      byFlag: byFlag.map((row) => ({ ...row })),
       commitBuckets,
       repoCount,
       items,
@@ -485,7 +485,7 @@ export function compilePublicSnapshot(dbPath: string): CompiledPublicSnapshot {
         url: row.html_url,
       })),
       orgs,
-      repos: byRepo,
+      repos: byRepo.map((row) => ({ ...row })),
     };
 
     const manifest: PublicSnapshotManifest = {
