@@ -1,0 +1,73 @@
+name: Blind Dream Loop scene verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/blind-scene-verification]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
+      VISUAL_BASE_URL: http://127.0.0.1:4173/gh-contrib-archive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - name: Install visual verifier dependencies
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+          python3 -m pip install --disable-pip-version-check pillow numpy scikit-image ImageHash
+
+      - name: Serve static export under project base path
+        run: |
+          mkdir -p .visual-root/gh-contrib-archive
+          cp -a out/. .visual-root/gh-contrib-archive/
+          python3 -m http.server 4173 --directory .visual-root >/tmp/visual-http.log 2>&1 &
+          echo $! > /tmp/visual-http.pid
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/gh-contrib-archive/worlds/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/visual-http.log
+          exit 1
+
+      - name: Capture scene-only render A
+        run: |
+          mkdir -p visual-report/render/run-a
+          VISUAL_OUT=visual-report/render/run-a xvfb-run -a node scripts/capture-scenes.mjs
+
+      - name: Capture scene-only render B
+        run: |
+          mkdir -p visual-report/render/run-b
+          VISUAL_OUT=visual-report/render/run-b xvfb-run -a node scripts/capture-scenes.mjs
+
+      - name: Compare against Dream Loop targets
+        run: |
+          python3 scripts/visual-metrics.py \
+            --run-a visual-report/render/run-a \
+            --run-b visual-report/render/run-b \
+            --output visual-report/report
+          cat visual-report/report/metrics.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload blind verification pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: dream-loop-scene-verification
+          path: visual-report/
+          if-no-files-found: error
+          retention-days: 7
