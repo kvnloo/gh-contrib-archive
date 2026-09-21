@@ -1,0 +1,87 @@
+name: Mycelium visual fidelity
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "components/worlds/mycelium/**"
+      - "components/worlds/WorldChrome.tsx"
+      - "lib/visual-capture.ts"
+      - "scripts/visual-fidelity.py"
+      - "tests/visual-capture.test.ts"
+      - "public/dream-targets/catalog/mycelium/**"
+      - ".github/workflows/visual-fidelity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  blind:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Serve project-scoped export
+        run: |
+          rm -rf /tmp/site
+          mkdir -p /tmp/site/gh-contrib-archive
+          cp -R out/. /tmp/site/gh-contrib-archive/
+          nohup python3 -m http.server 4173 --directory /tmp/site >/tmp/site.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/gh-contrib-archive/worlds/mycelium/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/site.log
+          exit 1
+      - name: Capture deterministic Mycelium scene
+        run: |
+          mkdir -p visual
+          CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)"
+          test -n "$CHROME"
+          timeout 60s "$CHROME" --headless=new --no-sandbox --disable-dev-shm-usage --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --hide-scrollbars --window-size=1536,864 --virtual-time-budget=10000 --screenshot=visual/candidate.png "http://127.0.0.1:4173/gh-contrib-archive/worlds/mycelium/?capture=scene"
+          test -s visual/candidate.png
+      - name: Build blind packet and metrics
+        run: |
+          python3 -m pip install --disable-pip-version-check pillow numpy scikit-image
+          python3 scripts/visual-fidelity.py             --reference public/dream-targets/catalog/mycelium/v2-cinematic-cavern.png             --candidate visual/candidate.png             --out-dir visual | tee visual/blind.log
+      - name: Upload visual packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: mycelium-blind-visual
+          path: visual/
+          retention-days: 7
+
+  reveal:
+    needs: blind
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mycelium-blind-visual
+          path: visual
+      - name: Reveal A/B mapping
+        run: cat visual/reveal.json
