@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { WorldChrome } from "@/components/worlds/WorldChrome";
 import { useWorldGraph } from "@/components/worlds/useWorldGraph";
+import { isVisualVerifyMode, sceneRng } from "@/components/worlds/visualVerify";
 
 type RawNode = {
   id: string;
@@ -62,6 +63,7 @@ function layoutStars(
   nodes: RawNode[],
   citations: { source: string; target: string }[],
 ): { stars: Star[]; lines: { a: string; b: string; name: string }[] } {
+  const rng = sceneRng(0x434f4e53);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const catalogIds = new Set<string>();
   const starNodes = nodes.filter(isStarNode);
@@ -93,7 +95,7 @@ function layoutStars(
     pos.set(id, {
       x: Math.cos(t) * r * bias + (isHermes ? (i % 3) * 4 - 4 : 0),
       y: Math.sin(t) * r * 0.65 * bias + (isHermes ? (i % 4) * 3 - 5 : 0),
-      z: (Math.random() - 0.5) * (isHermes ? 6 : 18),
+      z: (rng() - 0.5) * (isHermes ? 6 : 18),
     });
   });
 
@@ -170,9 +172,9 @@ function layoutStars(
 
     if (isConnected || n.repo === HERMES_REPO || n.repo === BUSIEST_REPO) {
       const p = pos.get(n.id) ?? {
-        x: (Math.random() - 0.5) * 40,
-        y: (Math.random() - 0.5) * 30,
-        z: (Math.random() - 0.5) * 20,
+        x: (rng() - 0.5) * 40,
+        y: (rng() - 0.5) * 30,
+        z: (rng() - 0.5) * 20,
       };
       const base = agentTemplate ? new THREE.Color(0xff4fd8) : new THREE.Color(0xe8f4ff);
       stars.push({
@@ -196,10 +198,10 @@ function layoutStars(
       stars.push({
         id: n.id,
         kind: "dust",
-        x: (Math.random() - 0.5) * 220,
-        y: (Math.random() - 0.5) * 160,
-        z: (Math.random() - 0.5) * 80 - 40,
-        size: 0.35 + Math.random() * 0.25,
+        x: (rng() - 0.5) * 220,
+        y: (rng() - 0.5) * 160,
+        z: (rng() - 0.5) * 80 - 40,
+        size: 0.35 + rng() * 0.25,
         color: new THREE.Color(0x6a7a8a),
         url: n.url,
         repo: n.repo,
@@ -218,10 +220,10 @@ function layoutStars(
     stars.push({
       id: n.id,
       kind: "private",
-      x: (Math.random() - 0.5) * 260,
-      y: (Math.random() - 0.5) * 180,
-      z: (Math.random() - 0.5) * 100 - 50,
-      size: 0.2 + Math.random() * 0.15,
+      x: (rng() - 0.5) * 260,
+      y: (rng() - 0.5) * 180,
+      z: (rng() - 0.5) * 100 - 50,
+      size: 0.2 + rng() * 0.15,
       color: new THREE.Color(0x2a3040),
       agentTemplate: false,
       degree: 0,
@@ -233,10 +235,10 @@ function layoutStars(
     stars.push({
       id: `bg-${i}`,
       kind: "dust",
-      x: (Math.random() - 0.5) * 320,
-      y: (Math.random() - 0.5) * 240,
-      z: (Math.random() - 0.5) * 120 - 60,
-      size: 0.15 + Math.random() * 0.2,
+      x: (rng() - 0.5) * 320,
+      y: (rng() - 0.5) * 240,
+      z: (rng() - 0.5) * 120 - 60,
+      size: 0.15 + rng() * 0.2,
       color: new THREE.Color(0x888899),
       agentTemplate: false,
       degree: 0,
@@ -319,6 +321,7 @@ export default function ConstellationScene() {
     linesRef.current = layout.lines;
     starById.current = new Map(layout.stars.map((s) => [s.id, s]));
 
+    const verifyMode = isVisualVerifyMode();
     const w = mount.clientWidth;
     const h = mount.clientHeight;
 
@@ -497,8 +500,8 @@ export default function ConstellationScene() {
     let frame = 0;
     let raf = 0;
     const animate = () => {
-      frame++;
-      nebulaMat.uniforms.uTime.value = frame * 0.016;
+      if (!verifyMode) frame++;
+      nebulaMat.uniforms.uTime.value = verifyMode ? 0 : frame * 0.016;
       camera.position.x = parallax.x * 6;
       camera.position.y = -parallax.y * 4;
       camera.lookAt(parallax.x * 2, -parallax.y * 1.5, 0);
