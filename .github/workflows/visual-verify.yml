@@ -64,10 +64,37 @@ jobs:
             --output visual-report/report
           cat visual-report/report/metrics.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload blind verification pack
+      - name: Build randomized blind judge pack
+        run: |
+          mkdir -p visual-report/blind visual-report-key
+          python3 scripts/make-blind-pack.py \
+            --renders visual-report/render/run-a \
+            --output visual-report/blind \
+            --key visual-report-key/key.json
+          cp visual/JUDGE_RUBRIC.md visual-report/blind/JUDGE_RUBRIC.md
+
+      - name: Upload verification evidence
         uses: actions/upload-artifact@v4
         with:
           name: dream-loop-scene-verification
-          path: visual-report/
+          path: |
+            visual-report/render/
+            visual-report/report/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload blind judge pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: dream-loop-blind-pack
+          path: visual-report/blind/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload blind answer key
+        uses: actions/upload-artifact@v4
+        with:
+          name: dream-loop-blind-key
+          path: visual-report-key/key.json
           if-no-files-found: error
           retention-days: 7
