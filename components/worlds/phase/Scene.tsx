@@ -8,6 +8,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { Graph } from "@/components/worlds/useWorldGraph";
 import { useWorldGraph } from "@/components/worlds/useWorldGraph";
+import { isVisualVerifyMode } from "@/components/worlds/visualVerify";
 
 type GraphNode = Graph["nodes"][number] & {
   id?: string;
@@ -186,6 +187,7 @@ function PhaseCanvas({ graph }: { graph: Graph }) {
     const mount = mountRef.current;
     if (!mount || !graph) return;
 
+    const verifyMode = isVisualVerifyMode();
     const w = mount.clientWidth;
     const h = mount.clientHeight;
 
@@ -273,14 +275,14 @@ function PhaseCanvas({ graph }: { graph: Graph }) {
 
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      const dt = clock.getDelta();
+      const dt = verifyMode ? 0 : clock.getDelta();
       innerPhase += dt * innerSpeed;
       outerPhase += dt * outerSpeed;
       innerRing.rotation.y = innerPhase;
       outerRing.rotation.y = outerPhase;
       innerRing.position.y = 0.15 + Math.sin(frame * 0.008) * 0.06;
       outerRing.position.y = -0.05 + Math.sin(frame * 0.008 + 1.2) * 0.06;
-      frame++;
+      if (!verifyMode) frame++;
       composer.render();
     };
     animate();
