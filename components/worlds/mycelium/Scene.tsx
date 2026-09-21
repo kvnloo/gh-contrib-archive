@@ -3,7 +3,7 @@
 import { WorldChrome } from "@/components/worlds/WorldChrome";
 import { useWorldGraph, type Graph } from "@/components/worlds/useWorldGraph";
 import { publicAssetPath } from "@/lib/public-path";
-import { isVisualVerifyMode } from "@/components/worlds/visualVerify";
+import { isVisualVerifyMode, sceneRng } from "@/components/worlds/visualVerify";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -532,12 +532,13 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
 
     // Foreground heroes sit at the frame edges as scale references, mirroring
     // the target's big caps in the lower-left and right corners.
+    const heroRng = sceneRng(0x4845524f);
     const heroes = [
-      buildHeroMushroom(-6.4, 12.8, 1.35, uniforms),
-      buildHeroMushroom(-8.8, 8.4, 1.0, uniforms),
-      buildHeroMushroom(7.2, 12.0, 1.2, uniforms),
-      buildHeroMushroom(9.6, 6.8, 0.85, uniforms),
-      buildHeroMushroom(-4.2, 16.5, 0.75, uniforms),
+      buildHeroMushroom(-6.4, 12.8, 1.35, uniforms, heroRng),
+      buildHeroMushroom(-8.8, 8.4, 1.0, uniforms, heroRng),
+      buildHeroMushroom(7.2, 12.0, 1.2, uniforms, heroRng),
+      buildHeroMushroom(9.6, 6.8, 0.85, uniforms, heroRng),
+      buildHeroMushroom(-4.2, 16.5, 0.75, uniforms, heroRng),
     ];
     for (const hero of heroes) scene.add(hero.group);
     const heroBase = heroes.map((h) => h.light.intensity);
