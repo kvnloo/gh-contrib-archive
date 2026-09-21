@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Graph } from "@/components/worlds/useWorldGraph";
+import { isVisualVerifyMode, sceneRng } from "@/components/worlds/visualVerify";
 import * as THREE from "three";
 
 const LINE_COLORS = [
@@ -45,6 +46,8 @@ export default function MetroScene({ graph }: { graph: Graph }) {
     const overlay = overlayRef.current;
     if (!container || !overlay) return;
 
+    const verifyMode = isVisualVerifyMode();
+    const rng = sceneRng(0x4d455452);
     const width = container.clientWidth;
     const height = container.clientHeight;
 
@@ -262,7 +265,7 @@ export default function MetroScene({ graph }: { graph: Graph }) {
           mesh: trainMesh,
           curve,
           speed: 0.12 + (ri % 3) * 0.04 + oi * 0.008,
-          t: Math.random(),
+          t: rng(),
         });
       });
     });
@@ -338,17 +341,17 @@ export default function MetroScene({ graph }: { graph: Graph }) {
     // Distant city haze lights
     const cityGroup = new THREE.Group();
     for (let i = 0; i < 80; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const d = 35 + Math.random() * 25;
+      const a = rng() * Math.PI * 2;
+      const d = 35 + rng() * 25;
       const dot = new THREE.Mesh(
-        new THREE.SphereGeometry(0.04 + Math.random() * 0.06, 6, 6),
+        new THREE.SphereGeometry(0.04 + rng() * 0.06, 6, 6),
         new THREE.MeshBasicMaterial({
-          color: new THREE.Color().setHSL(0.55 + Math.random() * 0.15, 0.5, 0.35 + Math.random() * 0.2),
+          color: new THREE.Color().setHSL(0.55 + rng() * 0.15, 0.5, 0.35 + rng() * 0.2),
           transparent: true,
-          opacity: 0.35 + Math.random() * 0.35,
+          opacity: 0.35 + rng() * 0.35,
         }),
       );
-      dot.position.set(Math.cos(a) * d, 1 + Math.random() * 4, Math.sin(a) * d - 15);
+      dot.position.set(Math.cos(a) * d, 1 + rng() * 4, Math.sin(a) * d - 15);
       cityGroup.add(dot);
     }
     scene.add(cityGroup);
@@ -409,7 +412,7 @@ export default function MetroScene({ graph }: { graph: Graph }) {
 
     const animate = () => {
       frameId = requestAnimationFrame(animate);
-      const dt = clock.getDelta();
+      const dt = verifyMode ? 0 : clock.getDelta();
 
       for (const tr of trains) {
         tr.t = (tr.t + tr.speed * dt) % 1;
@@ -421,7 +424,7 @@ export default function MetroScene({ graph }: { graph: Graph }) {
         (tr.mesh.material as THREE.MeshBasicMaterial).opacity = pulse;
       }
 
-      loopGlow.intensity = 2 + Math.sin(clock.elapsedTime * 1.2) * 0.4;
+      loopGlow.intensity = 2 + Math.sin((verifyMode ? 0 : clock.elapsedTime) * 1.2) * 0.4;
       updateLabels();
       renderer.render(scene, camera);
     };
