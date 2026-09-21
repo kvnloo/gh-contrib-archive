@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  pages: write
+  id-token: write
 
 jobs:
   automerge:
@@ -28,4 +30,11 @@ jobs:
             gh pr merge "$PR" --merge --auto --delete-branch=false
           else
             echo "scheme forbids nightly automerge"
+            exit 1
           fi
+
+  deploy:
+    needs: automerge
+    uses: ./.github/workflows/deploy-pages.yml
+    with:
+      ref: nightly
