@@ -8,23 +8,22 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
-  actions: write
-  pages: read
 jobs:
-  diagnose:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     env:
-      GH_TOKEN: ${{ github.token }}
-      REPO: ${{ github.repository }}
+      NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
     steps:
-      - name: Read deployment boundary
-        run: |
-          gh api "repos/$REPO/pages" --jq '{status,html_url,build_type,source}' || true
-          CHECK=$(gh api "repos/$REPO/actions/jobs/106192181502" --jq '.check_run_url' || true)
-          if [ -n "$CHECK" ]; then gh api "$CHECK/annotations" --jq '.[].message' || true; fi
-          gh api "repos/$REPO/environments/github-pages" --jq '{name,protection_rules,deployment_branch_policy}' || true
-          gh api "repos/$REPO/actions/workflows" --jq '.workflows[] | select(.path | contains("deploy-pages")) | {id,path,state}'
-      - name: Request deployment in nightly context
-        run: |
-          gh api --method POST "repos/$REPO/actions/workflows/deploy-pages.yml/dispatches" -f ref=nightly
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Read allowed deployment refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/${{ github.repository }}/environments/github-pages/deployment-branch-policies" --jq '.branch_policies[] | {name,type}' || true
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
