@@ -7,6 +7,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { FilmPass } from "three/addons/postprocessing/FilmPass.js";
 import type { Graph } from "@/components/worlds/useWorldGraph";
+import { isVisualVerifyMode } from "@/components/worlds/visualVerify";
 import {
   TYPE_COLORS,
   LIGHT_PRIVATE,
@@ -56,6 +57,7 @@ export default function NightScene({ graph, year, onHover }: SceneProps) {
     const mount = mountRef.current;
     if (!mount) return;
 
+    const verifyMode = isVisualVerifyMode();
     const w = mount.clientWidth;
     const h = mount.clientHeight;
 
@@ -287,8 +289,8 @@ export default function NightScene({ graph, year, onHover }: SceneProps) {
     let raf = 0;
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      frame += 0.002;
-      earthGroup.rotation.y = -0.35 + Math.sin(frame * 0.4) * 0.008;
+      frame += verifyMode ? 0 : 0.002;
+      earthGroup.rotation.y = -0.35 + (verifyMode ? 0 : Math.sin(frame * 0.4) * 0.008);
       composer.render();
     };
     animate();
