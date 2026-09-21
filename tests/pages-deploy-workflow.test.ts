@@ -12,6 +12,10 @@ describe("Pages deployment after automated nightly promotion", () => {
     assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*inputs\.ref\s*\|\|\s*github\.ref_name\s*\}\}/);
   });
 
+  it("uses a dedicated deployment environment for nightly Pages", () => {
+    assert.match(deploy, /environment:\s*[\s\S]*name:\s*archive-pages/);
+  });
+
   it("calls Pages deployment from the nightly promotion workflow after merge", () => {
     assert.match(nightly, /pages:\s*write/);
     assert.match(nightly, /id-token:\s*write/);
