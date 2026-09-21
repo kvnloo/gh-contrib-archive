@@ -68,11 +68,25 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check pillow numpy scikit-image
           python3 scripts/visual-fidelity.py             --reference public/dream-targets/catalog/mycelium/v2-cinematic-cavern.png             --candidate visual/candidate.png             --out-dir visual | tee visual/blind.log
-      - name: Upload visual packet
+      - name: Upload blind-only packet
         uses: actions/upload-artifact@v4
         with:
           name: mycelium-blind-visual
-          path: visual/
+          path: |
+            visual/blind-a.jpg
+            visual/blind-b.jpg
+            visual/blind-metrics.json
+          retention-days: 7
+      - name: Upload reveal diagnostics separately
+        uses: actions/upload-artifact@v4
+        with:
+          name: mycelium-visual-reveal
+          path: |
+            visual/reveal.json
+            visual/diagnostics.json
+            visual/candidate.png
+            visual/candidate-preview.jpg
+            visual/reference-preview.jpg
           retention-days: 7
 
   reveal:
@@ -81,7 +95,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: mycelium-blind-visual
+          name: mycelium-visual-reveal
           path: visual
       - name: Reveal A/B mapping
         run: cat visual/reveal.json
