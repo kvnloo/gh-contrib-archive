@@ -73,6 +73,7 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
   const [filters, setFilters] = useState<ArchiveFilters>({});
   const [draft, setDraft] = useState<ArchiveFilters>({});
   const [page, setPage] = useState(0);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const limit = 50;
 
   useEffect(() => {
@@ -130,12 +131,12 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
     .sort((a, b) => b.year - a.year);
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6">
+    <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:gap-8 sm:px-6 sm:py-8">
       <header className="flex flex-col gap-3">
         <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">GitHub contribution archive</p>
-        <h1 className="text-3xl font-semibold tracking-tight">Everything @kvnloo left on GitHub</h1>
+        <h1 className="text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">Everything @kvnloo left on GitHub</h1>
         <p className="max-w-3xl text-sm leading-6 text-zinc-400">
-          <Link href="/worlds" className="text-sky-300 hover:underline">Five graph worlds</Link>
+          <Link href="/worlds" className="inline-flex min-h-11 items-center text-sky-300 hover:underline">Five graph worlds</Link>
           {" "}· public issues, PRs, and comments are linked. Private repositories appear only
           as anonymous type/date events and aggregate commit counts.
         </p>
@@ -151,7 +152,7 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
         <Stat label="private commits" value={archive.stats.private_commits} />
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         <Panel title="By year"><YearBars rows={archive.byYear} /></Panel>
         <Panel title="Type mix"><div className="mt-4"><TypeMix rows={archive.byType} /></div></Panel>
         <Panel title="Monthly activity" wide subtitle="Includes private events as anonymous counts.">
@@ -175,7 +176,7 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
       </section>
 
       {archive.byFlag.length > 0 ? (
-        <section className="flex flex-wrap gap-2 text-xs">
+        <section className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-xs sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
           {archive.byFlag.map((flag) => (
             <button
               type="button"
@@ -187,7 +188,7 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
                 setPage(0);
                 syncUrl(next, 0);
               }}
-              className={`rounded-full px-3 py-1 ring-1 ${severityClass(flag.severity)}`}
+              className={`min-h-9 shrink-0 rounded-full px-3 py-1 ring-1 ${severityClass(flag.severity)}`}
             >
               {flag.code} {flag.n}
             </button>
@@ -195,21 +196,35 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
         </section>
       ) : null}
 
-      <form onSubmit={applyFilters} className="grid gap-3 rounded-xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800 sm:grid-cols-5">
-        <select value={draft.type ?? ""} onChange={(e) => setDraft((v) => ({ ...v, type: e.target.value || undefined }))} className="rounded-md bg-zinc-950 px-3 py-2 text-sm ring-1 ring-zinc-800">
+      <>
+      <button
+        type="button"
+        onClick={() => setFiltersOpen((open) => !open)}
+        aria-expanded={filtersOpen}
+        className="flex min-h-11 items-center justify-between rounded-xl bg-zinc-900/70 px-4 text-sm ring-1 ring-zinc-800 sm:hidden"
+      >
+        <span>Filters</span>
+        <span className="text-zinc-500">{filtersOpen ? "hide" : "show"}</span>
+      </button>
+      <form
+        onSubmit={applyFilters}
+        className={`${filtersOpen ? "grid" : "hidden"} gap-3 rounded-xl bg-zinc-900/70 p-3 ring-1 ring-zinc-800 sm:grid sm:grid-cols-5 sm:p-4`}
+      >
+        <select value={draft.type ?? ""} onChange={(e) => setDraft((v) => ({ ...v, type: e.target.value || undefined }))} className="min-h-11 rounded-md bg-zinc-950 px-3 py-2 text-base ring-1 ring-zinc-800 sm:text-sm">
           {TYPES.map((type) => <option key={type} value={type}>{type || "all types"}</option>)}
         </select>
-        <select value={draft.flag ?? ""} onChange={(e) => setDraft((v) => ({ ...v, flag: e.target.value || undefined }))} className="rounded-md bg-zinc-950 px-3 py-2 text-sm ring-1 ring-zinc-800">
+        <select value={draft.flag ?? ""} onChange={(e) => setDraft((v) => ({ ...v, flag: e.target.value || undefined }))} className="min-h-11 rounded-md bg-zinc-950 px-3 py-2 text-base ring-1 ring-zinc-800 sm:text-sm">
           {FLAGS.map((flag) => <option key={flag} value={flag}>{flag || "all flags"}</option>)}
         </select>
-        <input value={draft.year ?? ""} onChange={(e) => setDraft((v) => ({ ...v, year: e.target.value || undefined }))} placeholder="year" inputMode="numeric" className="rounded-md bg-zinc-950 px-3 py-2 text-sm ring-1 ring-zinc-800" />
-        <input value={draft.repo ?? ""} onChange={(e) => setDraft((v) => ({ ...v, repo: e.target.value || undefined }))} placeholder="public repo" className="rounded-md bg-zinc-950 px-3 py-2 text-sm ring-1 ring-zinc-800" />
-        <input value={draft.q ?? ""} onChange={(e) => setDraft((v) => ({ ...v, q: e.target.value || undefined }))} placeholder="search public text" className="rounded-md bg-zinc-950 px-3 py-2 text-sm ring-1 ring-zinc-800" />
+        <input value={draft.year ?? ""} onChange={(e) => setDraft((v) => ({ ...v, year: e.target.value || undefined }))} placeholder="year" inputMode="numeric" className="min-h-11 rounded-md bg-zinc-950 px-3 py-2 text-base ring-1 ring-zinc-800 sm:text-sm" />
+        <input value={draft.repo ?? ""} onChange={(e) => setDraft((v) => ({ ...v, repo: e.target.value || undefined }))} placeholder="public repo" className="min-h-11 rounded-md bg-zinc-950 px-3 py-2 text-base ring-1 ring-zinc-800 sm:text-sm" />
+        <input value={draft.q ?? ""} onChange={(e) => setDraft((v) => ({ ...v, q: e.target.value || undefined }))} placeholder="search public text" className="min-h-11 rounded-md bg-zinc-950 px-3 py-2 text-base ring-1 ring-zinc-800 sm:text-sm" />
         <div className="flex gap-2 sm:col-span-5">
-          <button className="flex-1 rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-950">Filter</button>
-          <button type="button" onClick={clearFilters} className="rounded-md px-3 py-2 text-sm text-zinc-400 ring-1 ring-zinc-700 hover:text-zinc-200">Clear</button>
+          <button className="min-h-11 flex-1 rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-950">Filter</button>
+          <button type="button" onClick={clearFilters} className="min-h-11 rounded-md px-4 py-2 text-sm text-zinc-400 ring-1 ring-zinc-700 hover:text-zinc-200">Clear</button>
         </div>
       </form>
+      </>
 
       <p className="text-sm text-zinc-500">Showing {paged.items.length} of {paged.total}</p>
 
@@ -222,12 +237,12 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
               <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                 <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono">{item.type}</span>
                 <span>{item.created_at.slice(0, 10)}</span>
-                {item.visibility === "public" && item.repo ? <span>{item.repo}</span> : null}
+                {item.visibility === "public" && item.repo ? <span className="max-w-full truncate">{item.repo}</span> : null}
                 {item.visibility === "private" ? <span className="rounded bg-zinc-800 px-1.5 py-0.5">private</span> : null}
               </div>
               {item.visibility === "public" ? (
                 <>
-                  <a href={item.url} className="mt-1 block truncate text-sm font-medium text-sky-300 hover:underline" target="_blank" rel="noreferrer">
+                  <a href={item.url} className="mt-1 block break-words text-sm font-medium leading-5 text-sky-300 hover:underline" target="_blank" rel="noreferrer">
                     {item.title || item.url}
                   </a>
                   {item.excerpt ? <p className="mt-1 line-clamp-2 text-sm text-zinc-400">{item.excerpt}</p> : null}
@@ -249,10 +264,10 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
         ))}
       </ul>
 
-      <nav className="flex justify-between text-sm">
-        <button type="button" disabled={paged.page === 0} onClick={() => jumpTo(paged.page - 1)} className="text-sky-300 hover:underline disabled:invisible">Previous</button>
+      <nav className="flex items-center justify-between gap-3 text-sm">
+        <button type="button" disabled={paged.page === 0} onClick={() => jumpTo(paged.page - 1)} className="min-h-11 min-w-20 rounded-full px-3 text-sky-300 ring-1 ring-zinc-800 hover:bg-zinc-900 disabled:invisible">Previous</button>
         <span className="text-zinc-600">page {paged.page + 1}</span>
-        <button type="button" disabled={(paged.page + 1) * limit >= paged.total} onClick={() => jumpTo(paged.page + 1)} className="text-sky-300 hover:underline disabled:invisible">Next</button>
+        <button type="button" disabled={(paged.page + 1) * limit >= paged.total} onClick={() => jumpTo(paged.page + 1)} className="min-h-11 min-w-20 rounded-full px-3 text-sky-300 ring-1 ring-zinc-800 hover:bg-zinc-900 disabled:invisible">Next</button>
       </nav>
     </main>
   );
@@ -260,7 +275,7 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
 
 function Panel({ title, subtitle, wide = false, children }: { title: string; subtitle?: string; wide?: boolean; children: React.ReactNode }) {
   return (
-    <div className={`rounded-xl bg-zinc-900/70 p-4 ring-1 ring-zinc-800 ${wide ? "lg:col-span-2" : ""}`}>
+    <div className={`min-w-0 overflow-hidden rounded-xl bg-zinc-900/70 p-3 ring-1 ring-zinc-800 sm:p-4 ${wide ? "lg:col-span-2" : ""}`}>
       <h2 className="text-sm font-medium">{title}</h2>
       {subtitle ? <p className="mt-1 text-xs text-zinc-500">{subtitle}</p> : null}
       {children}
@@ -270,9 +285,9 @@ function Panel({ title, subtitle, wide = false, children }: { title: string; sub
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-zinc-900 p-4 ring-1 ring-zinc-800">
-      <div className="text-2xl font-semibold tabular-nums">{value ?? 0}</div>
-      <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
+    <div className="min-w-0 rounded-xl bg-zinc-900 p-3 ring-1 ring-zinc-800 sm:p-4">
+      <div className="text-xl font-semibold tabular-nums sm:text-2xl">{value ?? 0}</div>
+      <div className="text-[10px] uppercase leading-4 tracking-wide text-zinc-500 sm:text-xs">{label}</div>
     </div>
   );
 }
