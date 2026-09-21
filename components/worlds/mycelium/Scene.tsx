@@ -13,6 +13,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
 import { GradeShader } from "./GradeShader";
+import { cinemaProfile, advanceSceneTime, shouldRenderFrame } from "./cinema-profile";
 import { buildCanopy, buildVault } from "./canopy";
 import { buildCity } from "./city";
 import {
@@ -100,11 +101,12 @@ function buildTerrain(
   soil: THREE.Texture,
   bump: THREE.Texture,
   uniforms: { uTime: { value: number } },
+  segments = 180,
 ): THREE.Mesh {
   const width = 150;
   const depth = 200;
   const centerZ = -66;
-  const geo = new THREE.PlaneGeometry(width, depth, 300, 380);
+  const geo = new THREE.PlaneGeometry(width, depth, segments, Math.round(segments * 1.25));
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   const color = new THREE.Color();
@@ -379,6 +381,14 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
+    const query = new URLSearchParams(window.location.search);
+    const capture = query.get("capture") === "scene";
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let profile = cinemaProfile(container.clientWidth, window.devicePixelRatio, motion.matches, query.get("look") ?? "midnight");
+    playingRef.current = profile.autoplay && !capture;
+    autoCamRef.current = profile.autoplay && !capture;
+    setPlaying(playingRef.current);
+    setAutoCam(autoCamRef.current);
 
     const nodes = graph.nodes as GraphNode[];
     const publicItems: PublicItem[] = nodes
@@ -403,18 +413,18 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     // eye down the channel to the distant spires, with the banks and canopy
     // closing in as dark framing mass.
     const camera = new THREE.PerspectiveCamera(
-      56,
+      profile.fov,
       container.clientWidth / container.clientHeight,
       0.05,
       400,
     );
-    const camHome = new THREE.Vector3(0.4, -0.45, 14.5);
-    const camTarget = new THREE.Vector3(streamCenter(-26), 3.4, -28);
+    const camHome = new THREE.Vector3(streamCenter(18), WATER_LEVEL + 3.4, 18);
+    const camTarget = new THREE.Vector3(streamCenter(-34), 1.5, -34);
     camera.position.copy(camHome);
     camera.lookAt(camTarget);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(profile.pixelRatio);
     renderer.setSize(container.clientWidth, container.clientHeight);
     // Tone mapping is deliberately deferred to GradeShader so the bloom pass
     // sees real linear HDR and the ACES curve is only ever applied once.
@@ -428,12 +438,15 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     // the dark 90% of the frame is left alone instead of being lifted into fog.
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(container.clientWidth, container.clientHeight),
-      0.4,
-      0.45,
-      0.88,
+      0.25,
+      0.5,
+      1.15,
     );
     composer.addPass(bloom);
     const grade = new ShaderPass(GradeShader);
+    grade.uniforms.uExposure.value = profile.exposure;
+    grade.uniforms.uGrain.value = capture ? 0 : 0.006;
+    grade.uniforms.uAberration.value = 0.0005;
     composer.addPass(grade);
     composer.addPass(new OutputPass());
 
@@ -467,7 +480,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     gills.repeat.set(7, 1);
     setGillMap(gills);
 
-    const ground = buildTerrain(soil, soilBump, uniforms);
+    const ground = buildTerrain(soil, soilBump, uniforms, profile.terrainSegments);
     scene.add(ground);
 
     scene.add(buildVault(vaultRock, vaultBump));
@@ -477,7 +490,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
       190,
       waterDudv,
       uniforms,
-      Math.min(1024, Math.max(512, Math.round(container.clientWidth))),
+      profile.reflectionSize,
     );
     water.rotation.x = -Math.PI / 2;
     water.position.set(0, WATER_LEVEL, -66);
@@ -500,7 +513,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     scene.add(city.group);
 
     // Public colonies: clickable, titled. Private colonies: dim, anonymous.
-    const publicPlacements = layOutColonies(Math.min(publicItems.length, 260), 0x1234abcd, {
+    const publicPlacements = layOutColonies(Math.min(publicItems.length, profile.colonyLimit), 0x1234abcd, {
       zNear: 18,
       zFar: -44,
       bright: true,
@@ -511,7 +524,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     });
     scene.add(publicField.group);
 
-    const privatePlacements = layOutColonies(Math.min(privateCount, 320), 0xfeed5eed, {
+    const privatePlacements = layOutColonies(Math.min(privateCount, profile.colonyLimit), 0xfeed5eed, {
       zNear: -18,
       zFar: -92,
       bright: false,
@@ -541,7 +554,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     );
     scene.add(filamentGroup);
 
-    const spores = buildSpores(520, 0xabcdef);
+    const spores = buildSpores(profile.sporeCount, 0xabcdef);
     scene.add(spores);
 
     // A cave has no skylight, but a cave full of bioluminescence has a huge
@@ -610,13 +623,29 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
       [6.0, -44, 0.6],
       [-8.0, -54, 0.5],
     ];
-    for (const [x, z, power] of colonySpots) {
+    for (const [x, z, power] of colonySpots.filter((_, i) => container.clientWidth >= 768 || i % 2 === 0)) {
       const light = new THREE.PointLight(0x62f0d8, 460 * power, 26, 2);
       light.position.set(x, terrainHeight(x, z) + 1.2, z);
       scene.add(light);
       colonyLights.push(light);
     }
     const colonyBase = colonyLights.map((l) => l.intensity);
+
+    // Light has hierarchy: a quiet cool ecosystem around a localized amber heart.
+    scene.traverse((object) => {
+      if (object instanceof THREE.PointLight) {
+        object.intensity *= object.color.r > object.color.g ? profile.warmLightScale : profile.coolLightScale;
+      }
+    });
+    const onMotionChange = () => {
+      if (motion.matches) {
+        playingRef.current = false;
+        autoCamRef.current = false;
+        setPlaying(false);
+        setAutoCam(false);
+      }
+    };
+    motion.addEventListener("change", onMotionChange);
 
     // Interaction: hover/click on public fruiting bodies only.
     const raycaster = new THREE.Raycaster();
@@ -667,6 +696,11 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     const onResize = () => {
       const w = container.clientWidth;
       const h = container.clientHeight;
+      if (w < 1 || h < 1) return;
+      profile = cinemaProfile(w, window.devicePixelRatio, motion.matches, query.get("look") ?? "midnight");
+      camera.fov = profile.fov;
+      renderer.setPixelRatio(profile.pixelRatio);
+      composer.setPixelRatio(profile.pixelRatio);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
@@ -683,16 +717,20 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     let lastFps = performance.now();
     let fpsFrames = 0;
     let flowTime = 0;
+    let previousFrame = -Infinity;
     const clock = new THREE.Clock();
     const tmp = new THREE.Vector3();
 
     const animate = () => {
       raf = requestAnimationFrame(animate);
+      const now = performance.now();
+      if (!shouldRenderFrame(now, previousFrame, profile.fps, document.hidden)) return;
+      previousFrame = now;
       const dt = Math.min(clock.getDelta(), 0.05);
-      const t = clock.elapsedTime;
+      flowTime = advanceSceneTime(flowTime, dt, playingRef.current && !capture);
+      const t = capture ? 6 : flowTime;
       uniforms.uTime.value = t;
       grade.uniforms.uTime.value = t;
-      if (playingRef.current) flowTime += dt;
 
       // Nutrient packets crawling the hyphal network.
       for (let i = 0; i < filaments.length; i++) {
@@ -709,7 +747,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
       packetPos.needsUpdate = true;
 
       // Spores rising through the shafts of light.
-      if (playingRef.current) {
+      if (playingRef.current && !capture) {
         for (let i = 0; i < sporePos.count; i++) {
           let y = sporePos.getY(i) + sporeDrift.getY(i) * dt;
           const x = sporePos.getX(i) + Math.sin(t * 0.3 + i) * sporeDrift.getX(i) * dt;
@@ -732,21 +770,21 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
       });
 
       heroes.forEach((hero, i) => {
-        hero.light.intensity = heroBase[i] * (0.85 + 0.15 * Math.sin(t * 0.9 + i * 2));
+        hero.light.intensity = heroBase[i] * profile.coolLightScale * (0.85 + 0.15 * Math.sin(t * 0.9 + i * 2));
       });
-      warmCore.intensity = 520 * (0.9 + 0.1 * Math.sin(t * 0.7));
+      warmCore.intensity = 520 * profile.warmLightScale * (0.9 + 0.1 * Math.sin(t * 0.7));
       colonyLights.forEach((light, i) => {
         // Colonies pulse out of phase, so the banks never look statically lit.
-        light.intensity = colonyBase[i] * (0.78 + 0.22 * Math.sin(t * 0.6 + i * 1.7));
+        light.intensity = colonyBase[i] * profile.coolLightScale * (0.78 + 0.22 * Math.sin(t * 0.6 + i * 1.7));
       });
 
-      if (autoCamRef.current) {
+      if (autoCamRef.current && playingRef.current && !capture) {
         // Slow handheld drift down the ravine.
         const breath = Math.sin(t * 0.11);
         camera.position.set(
-          camHome.x + Math.sin(t * 0.075) * 1.5,
+          camHome.x + Math.sin(t * 0.075) * 0.45,
           camHome.y + Math.sin(t * 0.052) * 0.22,
-          camHome.z - (1 - Math.cos(t * 0.038)) * 3.6,
+          camHome.z - (1 - Math.cos(t * 0.038)) * 1.2,
         );
         controls.target.set(
           camTarget.x + breath * 0.9,
@@ -757,10 +795,13 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
 
       controls.update();
       composer.render();
+      renderer.domElement.dataset.sceneReady = "true";
+      renderer.domElement.dataset.sceneTime = t.toFixed(4);
+      renderer.domElement.dataset.look = profile.look;
+      renderer.domElement.dataset.pixelRatio = String(profile.pixelRatio);
 
       fpsFrames++;
-      const now = performance.now();
-      if (now - lastFps > 500) {
+      if (now - lastFps > 2000) {
         setFps(Math.round((fpsFrames * 1000) / (now - lastFps)));
         fpsFrames = 0;
         lastFps = now;
@@ -770,6 +811,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
 
     return () => {
       cancelAnimationFrame(raf);
+      motion.removeEventListener("change", onMotionChange);
       window.removeEventListener("resize", onResize);
       renderer.domElement.removeEventListener("pointermove", onMove);
       renderer.domElement.removeEventListener("pointerleave", onLeave);
@@ -826,20 +868,20 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-end justify-between gap-3 p-4">
+      <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] sm:bottom-0 z-20 flex flex-wrap items-end justify-between gap-3 p-4">
         <div className="pointer-events-auto flex gap-2">
           <button
             type="button"
             onClick={togglePlay}
-            className="rounded-full bg-black/50 px-4 py-2 text-xs uppercase tracking-wider text-teal-300 ring-1 ring-teal-500/40 backdrop-blur hover:bg-teal-950/60"
+            className="min-h-11 rounded-full bg-black/50 px-4 py-2 text-xs uppercase tracking-wider text-teal-300 ring-1 ring-teal-500/40 backdrop-blur hover:bg-teal-950/60"
           >
-            {playing ? "Pause flow" : "Resume flow"}
+            {playing ? "Pause dream" : "Resume dream"}
           </button>
           {!autoCam ? (
             <button
               type="button"
               onClick={recenter}
-              className="rounded-full bg-black/50 px-4 py-2 text-xs uppercase tracking-wider text-teal-300 ring-1 ring-teal-500/40 backdrop-blur hover:bg-teal-950/60"
+              className="min-h-11 rounded-full bg-black/50 px-4 py-2 text-xs uppercase tracking-wider text-teal-300 ring-1 ring-teal-500/40 backdrop-blur hover:bg-teal-950/60"
             >
               Resume drift
             </button>

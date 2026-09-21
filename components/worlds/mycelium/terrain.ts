@@ -4,7 +4,7 @@
  */
 
 export const WATER_LEVEL = -1.24;
-export const CHANNEL_HALF_WIDTH = 2.1;
+export const CHANNEL_HALF_WIDTH = 3.2;
 
 function hash2(x: number, y: number): number {
   const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
@@ -53,13 +53,13 @@ export function terrainHeight(x: number, z: number): number {
   const dc = Math.abs(x - meander);
 
   // Steep cut banks keep the stream narrow, as in a real incised channel.
-  const bank = Math.pow(smoothstep(CHANNEL_HALF_WIDTH * 0.4, 6.5, dc), 1.25) * 3.6;
+  const bank = Math.pow(smoothstep(CHANNEL_HALF_WIDTH * 0.4, 6.5, dc), 1.25) * 2.8;
   const walls = Math.pow(smoothstep(13, 34, d), 1.6) * 12.0;
 
   // Foreground banks rise to frame the shot without blocking the vista. They
   // start closer to the camera and climb harder than the mid-ground so the
   // lower corners of the frame fall away into black earth.
-  const frame = smoothstep(-4, 16, z) * Math.pow(smoothstep(2.2, 11, dc), 1.1) * 6.4;
+  const frame = smoothstep(-4, 16, z) * Math.pow(smoothstep(3.2, 12, dc), 1.1) * 3.4;
 
   // Crumbly ridge-lines along the cut banks: the silhouette edge that separates
   // the dark foreground from the lit vista needs to be ragged, not a smooth arc.
