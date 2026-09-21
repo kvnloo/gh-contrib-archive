@@ -54,7 +54,13 @@ jobs:
           mkdir -p visual
           CHROME="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || true)"
           test -n "$CHROME"
-          timeout 60s "$CHROME" --headless=new --no-sandbox --disable-dev-shm-usage --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --hide-scrollbars --window-size=1536,864 --virtual-time-budget=10000 --screenshot=visual/candidate.png "http://127.0.0.1:4173/gh-contrib-archive/worlds/mycelium/?capture=scene"
+          set +e
+          timeout 60s "$CHROME" --headless=new --no-sandbox --disable-dev-shm-usage --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --hide-scrollbars --window-size=1536,864 --virtual-time-budget=10000 --run-all-compositor-stages-before-draw --screenshot=visual/candidate.png "http://127.0.0.1:4173/gh-contrib-archive/worlds/mycelium/?capture=scene"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi
           test -s visual/candidate.png
       - name: Build blind packet and metrics
         run: |
