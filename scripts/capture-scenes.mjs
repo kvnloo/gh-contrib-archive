@@ -78,6 +78,22 @@ for (const spec of specs) {
       failures.push(`${spec.id}: page errors: ${pageErrors.join(" | ")}`);
     }
 
+    await canvas.evaluate((element) => {
+      const keep = new Set();
+      let current = element;
+      while (current) {
+        keep.add(current);
+        current = current.parentElement;
+      }
+      for (const node of document.body.querySelectorAll("*")) {
+        if (!keep.has(node)) {
+          node.style.visibility = "hidden";
+        }
+      }
+      document.body.style.background = "#000";
+    });
+    await page.waitForTimeout(100);
+
     const screenshotPath = path.join(outputDir, `${spec.id}.png`);
     await canvas.screenshot({
       path: screenshotPath,
