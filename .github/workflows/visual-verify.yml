@@ -2,8 +2,23 @@ name: Blind Dream Loop scene verification
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "components/worlds/**"
+      - "app/worlds/**"
+      - "public/dream-targets/**"
+      - "visual/**"
+      - "scripts/capture-scenes.mjs"
+      - "scripts/visual-metrics.py"
+      - "scripts/make-blind-pack.py"
+      - ".github/workflows/visual-verify.yml"
+  # Bootstrap trigger for this verifier PR. Future world PRs use pull_request above.
   push:
     branches: [codex/blind-scene-verification]
+
+concurrency:
+  group: dream-loop-visual-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -27,7 +42,7 @@ jobs:
 
       - name: Install visual verifier dependencies
         run: |
-          npm install --no-save --ignore-scripts playwright@1.55.0
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
           npx playwright install --with-deps chromium
           python3 -m pip install --disable-pip-version-check pillow numpy scikit-image ImageHash
 
