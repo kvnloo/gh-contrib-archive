@@ -2,19 +2,21 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const workflowPath = new URL("../.github/workflows/deploy-pages.yml", import.meta.url);
+const deploy = readFileSync(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8");
+const nightly = readFileSync(new URL("../.github/workflows/automerge-nightly.yml", import.meta.url), "utf8");
 
-describe("Pages deployment workflow", () => {
-  it("deploys the tested static export from nightly with least-required Pages permissions", () => {
-    const workflow = readFileSync(workflowPath, "utf8");
-    assert.match(workflow, /branches:\s*\[nightly\]/);
-    assert.match(workflow, /contents:\s*read/);
-    assert.match(workflow, /pages:\s*write/);
-    assert.match(workflow, /id-token:\s*write/);
-    assert.match(workflow, /NEXT_PUBLIC_BASE_PATH:\s*\/gh-contrib-archive/);
-    assert.match(workflow, /actions\/configure-pages@v5/);
-    assert.match(workflow, /actions\/upload-pages-artifact@v4/);
-    assert.match(workflow, /path:\s*\.\/out/);
-    assert.match(workflow, /actions\/deploy-pages@v4/);
+describe("Pages deployment after automated nightly promotion", () => {
+  it("exposes the deploy workflow as a reusable workflow", () => {
+    assert.match(deploy, /workflow_call:/);
+    assert.match(deploy, /ref:/);
+    assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*inputs\.ref\s*\|\|\s*github\.ref_name\s*\}\}/);
+  });
+
+  it("calls Pages deployment from the nightly promotion workflow after merge", () => {
+    assert.match(nightly, /pages:\s*write/);
+    assert.match(nightly, /id-token:\s*write/);
+    assert.match(nightly, /needs:\s*automerge/);
+    assert.match(nightly, /uses:\s*\.\/\.github\/workflows\/deploy-pages\.yml/);
+    assert.match(nightly, /ref:\s*nightly/);
   });
 });
