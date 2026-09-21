@@ -41,6 +41,7 @@ for (const spec of specs) {
     page.on("pageerror", (error) => pageErrors.push(String(error)));
 
     const url = new URL(spec.route.replace(/^\//, ""), baseUrl.replace(/\/$/, "") + "/");
+    url.searchParams.set("verify", "1");
     await page.goto(url.toString(), {
       waitUntil: "networkidle",
       timeout: 45_000,
