@@ -138,8 +138,6 @@ def main() -> int:
     metrics = {
         "schema_version": 1,
         "scene": "mycelium",
-        "reference": args.reference.as_posix(),
-        "candidate": args.candidate.as_posix(),
         "metric_size": list(METRIC_SIZE),
         "ssim": round(ssim, 6),
         "low_frequency_composition": round(composition, 6),
@@ -147,11 +145,17 @@ def main() -> int:
         "hsv_distribution": round(color, 6),
         "luminance_histogram": round(luminance, 6),
         "diagnostic_weighted_similarity": round(diagnostic, 6),
+        "note": "Symmetric pairwise diagnostics only; blind visual review remains authoritative.",
+    }
+    (args.out_dir / "blind-metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+    diagnostics = {
+        **metrics,
+        "reference": args.reference.as_posix(),
+        "candidate": args.candidate.as_posix(),
         "candidate_luminance_mean": round(candidate_mean, 6),
         "candidate_luminance_std": round(candidate_std, 6),
-        "note": "Diagnostic metrics only; blind visual review remains authoritative for fidelity decisions.",
     }
-    (args.out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+    (args.out_dir / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2) + "\n")
 
     ref_preview = args.out_dir / "reference-preview.jpg"
     cand_preview = args.out_dir / "candidate-preview.jpg"
@@ -171,9 +175,7 @@ def main() -> int:
     blind_b.write_bytes(b.read_bytes())
     (args.out_dir / "reveal.json").write_text(json.dumps(mapping, indent=2) + "\n")
 
-    print("METRICS_JSON=" + json.dumps(metrics, separators=(",", ":")))
-    print("BLIND_A_BASE64=" + encode(blind_a))
-    print("BLIND_B_BASE64=" + encode(blind_b))
+    print("BLIND_METRICS_JSON=" + json.dumps(metrics, separators=(",", ":")))
     return 0
 
 
