@@ -1,22 +1,22 @@
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
-
-const deploy = readFileSync(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8");
-const nightly = readFileSync(new URL("../.github/workflows/automerge-nightly.yml", import.meta.url), "utf8");
-
-describe("Pages deployment after automated nightly promotion", () => {
-  it("exposes the deploy workflow as a reusable workflow", () => {
-    assert.match(deploy, /workflow_call:/);
-    assert.match(deploy, /ref:/);
-    assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*inputs\.ref\s*\|\|\s*github\.ref_name\s*\}\}/);
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+const workflow = readFileSync(new URL('../.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
+describe('Pages deployment workflow', () => {
+  it('tests and builds before uploading only the static publication tree', () => {
+    assert.match(workflow, /run: npm test/);
+    assert.match(workflow, /run: npm run build/);
+    assert.match(workflow, /actions\/configure-pages@v5/);
+    assert.match(workflow, /actions\/upload-pages-artifact@v4/);
+    assert.match(workflow, /path:\s*\.\/out/);
+    assert.match(workflow, /persist-credentials: false/);
+    assert.match(workflow, /NEXT_PUBLIC_BASE_PATH:\s*\/gh-contrib-archive/);
   });
-
-  it("calls Pages deployment from the nightly promotion workflow after merge", () => {
-    assert.match(nightly, /pages:\s*write/);
-    assert.match(nightly, /id-token:\s*write/);
-    assert.match(nightly, /needs:\s*automerge/);
-    assert.match(nightly, /uses:\s*\.\/\.github\/workflows\/deploy-pages\.yml/);
-    assert.match(nightly, /ref:\s*nightly/);
+  it('separates deploy authority and verifies the exact published revision', () => {
+    assert.match(workflow, /  deploy:[\s\S]*needs: build[\s\S]*pages: write[\s\S]*id-token: write/);
+    assert.match(workflow, /actions\/deploy-pages@v4/);
+    assert.match(workflow, /  verify-live:[\s\S]*needs: deploy/);
+    assert.match(workflow, /\.revision == \$sha/);
+    assert.match(workflow, /scripts\/verify-mycelium\.mjs/);
   });
 });
