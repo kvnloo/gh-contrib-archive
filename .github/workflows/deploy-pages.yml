@@ -1,53 +1,59 @@
 name: Deploy GitHub Pages
-
 on:
   push:
-    branches: [nightly]
+    branches: [main]
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      ref:
-        description: Git ref to build and deploy
-        required: false
-        type: string
-        default: nightly
-
+permissions:
+  contents: read
 concurrency:
-  group: pages
+  group: pages-production
   cancel-in-progress: false
-
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: read
     env:
       NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
+      NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref_name }}
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '22'
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Record this public release
+        run: |
+          node -e "require('node:fs').writeFileSync('public/release.json', JSON.stringify({revision:process.env.GITHUB_SHA,builtAt:new Date().toISOString(),source:'public snapshot only'}))"
       - run: npm run build
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-      - name: Upload static export
-        uses: actions/upload-pages-artifact@v4
+      - name: Validate publication tree
+        run: |
+          test -f out/index.html
+          test -f out/worlds/mycelium/index.html
+          test -f out/world-graph.json
+          test -f out/release.json
+          test -z "$(find out -type f \( -name '*.db' -o -name '*.sqlite' -o -name '.env*' \) -print)"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: ./out
-
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -55,3 +61,42 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPERIENCE_URL: https://kvnloo.github.io/gh-contrib-archive
+      EXPERIENCE_OUT: live-evidence
+      EXPERIENCE_SMOKE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify the deployed revision, not merely HTTP 200
+        run: |
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent "$EXPERIENCE_URL/release.json?revision=$GITHUB_SHA" | jq -e --arg sha "$GITHUB_SHA" '.revision == $sha'; then break; fi
+            if [ "$attempt" = 18 ]; then exit 1; fi
+            sleep 5
+          done
+          for route in '' worlds/ worlds/mycelium/ worlds/phase/ worlds/metro/ worlds/night/ worlds/constellation/; do
+            curl --fail --silent --output /dev/null "$EXPERIENCE_URL/$route"
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify the actual published phone experience
+        run: |
+          npm install --prefix /tmp/dream-browser --no-package-lock --ignore-scripts playwright@1.63.0
+          mkdir -p node_modules
+          ln -s /tmp/dream-browser/node_modules/playwright node_modules/playwright
+          /tmp/dream-browser/node_modules/.bin/playwright install --with-deps chromium
+          xvfb-run -a node scripts/verify-mycelium.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-phone-verification
+          path: live-evidence/
+          retention-days: 7
