@@ -4,6 +4,13 @@ on:
   push:
     branches: [nightly]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build and deploy
+        required: false
+        type: string
+        default: nightly
 
 concurrency:
   group: pages
@@ -19,6 +26,8 @@ jobs:
       NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
