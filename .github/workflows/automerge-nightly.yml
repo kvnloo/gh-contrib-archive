@@ -1,16 +1,11 @@
 name: Automerge nightly
-
 on:
   pull_request:
     branches: [nightly]
     types: [opened, synchronize, reopened, ready_for_review]
-
 permissions:
   contents: write
   pull-requests: write
-  pages: write
-  id-token: write
-
 jobs:
   automerge:
     if: >-
@@ -32,9 +27,3 @@ jobs:
             echo "scheme forbids nightly automerge"
             exit 1
           fi
-
-  deploy:
-    needs: automerge
-    uses: ./.github/workflows/deploy-pages.yml
-    with:
-      ref: nightly
