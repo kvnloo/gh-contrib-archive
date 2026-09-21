@@ -354,12 +354,6 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
   const autoCamRef = useRef(true);
 
   const stats = useMemo(() => {
-    const verifyMode = isVisualVerifyMode();
-    if (verifyMode) {
-      playingRef.current = false;
-      autoCamRef.current = false;
-    }
-
     const nodes = graph.nodes as GraphNode[];
     let pub = 0;
     let priv = 0;
@@ -386,6 +380,12 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
+
+    const verifyMode = isVisualVerifyMode();
+    if (verifyMode) {
+      playingRef.current = false;
+      autoCamRef.current = false;
+    }
 
     const nodes = graph.nodes as GraphNode[];
     const publicItems: PublicItem[] = nodes
