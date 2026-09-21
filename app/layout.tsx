@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
@@ -18,6 +18,13 @@ export const metadata: Metadata = {
   description: "Public GitHub issues, PRs, and comments — private work is counted, not opened",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  colorScheme: "dark",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -26,15 +33,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full bg-zinc-950 text-zinc-100">
         <header className="border-b border-zinc-800">
-          <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 text-sm sm:px-6">
-            <Link href="/" className="font-medium">
-              @kvnloo archive
+          <nav className="mx-auto flex min-h-14 max-w-6xl items-center justify-between gap-3 px-4 py-2 text-sm sm:px-6 sm:py-3">
+            <Link href="/" className="flex min-h-11 items-center font-medium">
+              <span className="sm:hidden">@kvnloo</span>
+              <span className="hidden sm:inline">@kvnloo archive</span>
             </Link>
-            <div className="flex gap-4 text-zinc-400">
-              <Link href="/" className="hover:text-zinc-100">
-                Visualize
+            <div className="flex items-center gap-1 text-zinc-400 sm:gap-2">
+              <Link href="/worlds" className="flex min-h-11 items-center rounded-full px-3 hover:bg-zinc-900 hover:text-zinc-100">
+                Worlds
               </Link>
-              <Link href="/sanity" className="hover:text-zinc-100">
+              <Link href="/sanity" className="flex min-h-11 items-center rounded-full px-3 hover:bg-zinc-900 hover:text-zinc-100">
                 Sanity
               </Link>
             </div>
