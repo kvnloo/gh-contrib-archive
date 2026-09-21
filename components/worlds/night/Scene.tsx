@@ -236,7 +236,7 @@ export default function NightScene({ graph, year, onHover }: SceneProps) {
     bloom.strength = 1.35;
     bloom.radius = 0.55;
     composer.addPass(bloom);
-    composer.addPass(new FilmPass(0.35, false));
+    if (!verifyMode) composer.addPass(new FilmPass(0.35, false));
 
     const raycaster = new THREE.Raycaster();
     raycaster.params.Points!.threshold = 0.035;
