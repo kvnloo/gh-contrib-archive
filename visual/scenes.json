@@ -1,0 +1,42 @@
+[
+  {
+    "id": "mycelium",
+    "route": "/worlds/mycelium/",
+    "target": "public/dream-targets/target-mycelium.png",
+    "width": 1672,
+    "height": 941,
+    "settleMs": 5000
+  },
+  {
+    "id": "night",
+    "route": "/worlds/night/",
+    "target": "public/dream-targets/target-night.png",
+    "width": 1280,
+    "height": 720,
+    "settleMs": 5000
+  },
+  {
+    "id": "phase",
+    "route": "/worlds/phase/",
+    "target": "public/dream-targets/target-phase.png",
+    "width": 1280,
+    "height": 720,
+    "settleMs": 5000
+  },
+  {
+    "id": "metro",
+    "route": "/worlds/metro/",
+    "target": "public/dream-targets/target-metro.png",
+    "width": 1280,
+    "height": 720,
+    "settleMs": 5000
+  },
+  {
+    "id": "constellation",
+    "route": "/worlds/constellation/",
+    "target": "public/dream-targets/target-constellation.png",
+    "width": 1280,
+    "height": 720,
+    "settleMs": 5000
+  }
+]
