@@ -179,7 +179,16 @@ export function buildHeroMushroom(
   const group = new THREE.Group();
   const ground = terrainHeight(x, z);
   group.position.set(x, ground + scale * 0.93, z);
-  group.rotation.set((Math.random() - 0.5) * 0.2, Math.random() * Math.PI, (Math.random() - 0.5) * 0.22);
+
+  // Derive orientation from placement rather than runtime randomness so the
+  // same public snapshot produces the same scene in screenshots and replays.
+  const seed =
+    ((Math.round((x + 64) * 1000) * 73856093) ^
+      (Math.round((z + 128) * 1000) * 19349663) ^
+      (Math.round(scale * 1000) * 83492791)) >>>
+    0;
+  const rng = makeRng(seed);
+  group.rotation.set((rng() - 0.5) * 0.2, rng() * Math.PI, (rng() - 0.5) * 0.22);
   group.scale.setScalar(scale);
 
   // Foreground heroes are read mostly as silhouette: a dark, damp cap crown
