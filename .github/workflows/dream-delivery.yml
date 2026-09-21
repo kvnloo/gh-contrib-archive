@@ -10,20 +10,80 @@ permissions:
   contents: read
 jobs:
   verify:
+    if: github.repository == 'kvnloo/gh-contrib-archive' && github.ref == 'refs/heads/codex/enchant-mycelium'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    permissions:
+      contents: write
     env:
       NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
+      NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-      - name: Read allowed deployment refs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api "repos/${{ github.repository }}/environments/github-pages/deployment-branch-policies" --jq '.branch_policies[] | {name,type}' || true
       - run: npm ci
+      - name: Install browser verifier
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+          python3 -m pip install pillow
+      - name: Build and capture original scene
+        run: |
+          npm run build
+          mkdir -p .visual-root/gh-contrib-archive
+          cp -a out/. .visual-root/gh-contrib-archive/
+          python3 -m http.server 4173 --directory .visual-root >/tmp/dream-http.log 2>&1 &
+          EXPERIENCE_BASELINE=1 EXPERIENCE_OUT=.dream-evidence/baseline node scripts/verify-mycelium.mjs
+      - name: Apply bounded scene changes
+        run: python3 .github/dream/patch-scene.py
       - run: npm test
       - run: npm run build
+      - name: Verify real desktop and phone experience
+        run: |
+          rm -rf .visual-root/gh-contrib-archive
+          mkdir -p .visual-root/gh-contrib-archive
+          cp -a out/. .visual-root/gh-contrib-archive/
+          EXPERIENCE_OUT=.dream-evidence/candidate node scripts/verify-mycelium.mjs
+      - name: Produce contact sheet
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from PIL import Image, ImageOps, ImageDraw
+          from pathlib import Path
+          import base64
+          specs=[('Reference',Path('public/dream-targets/catalog/mycelium/v2-cinematic-cavern.png')),('Baseline',Path('.dream-evidence/baseline/baseline.png'))]
+          specs += [(name,Path('.dream-evidence/candidate')/(name+'.png')) for name in ['midnight','moonlit','ember','verdant']]
+          sheet=Image.new('RGB',(768,720),'#101014')
+          d=ImageDraw.Draw(sheet)
+          for i,(label,file) in enumerate(specs):
+            x=(i%2)*384;y=(i//2)*240
+            d.text((x+8,y+7),label,fill='white')
+            if file.exists(): sheet.paste(ImageOps.fit(Image.open(file).convert('RGB'),(384,216)),(x,y+24))
+          Path('.dream-evidence').mkdir(exist_ok=True)
+          sheet.save('.dream-evidence/contact.jpg',quality=78)
+          sheet.resize((576,540)).save('.dream-evidence/contact.webp',quality=52)
+          print('CONTACT_SHEET_BASE64_BEGIN')
+          print(base64.b64encode(Path('.dream-evidence/contact.webp').read_bytes()).decode())
+          print('CONTACT_SHEET_BASE64_END')
+          PY
+      - name: Commit only verified visual source on feature branch
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/codex/enchant-mycelium'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add components/worlds/mycelium/Scene.tsx components/worlds/mycelium/terrain.ts components/worlds/mycelium/props.ts
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat: center the dream, restore light hierarchy, and bound mobile render cost'
+            git push origin HEAD:codex/enchant-mycelium
+          fi
+          echo "VERIFIED_SOURCE_SHA=$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mycelium-experience-evidence
+          path: .dream-evidence/
+          if-no-files-found: error
+          retention-days: 7
