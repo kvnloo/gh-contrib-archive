@@ -3,6 +3,7 @@
 import { WorldChrome } from "@/components/worlds/WorldChrome";
 import { useWorldGraph, type Graph } from "@/components/worlds/useWorldGraph";
 import { publicAssetPath } from "@/lib/public-path";
+import { isVisualVerifyMode } from "@/components/worlds/visualVerify";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -353,6 +354,12 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
   const autoCamRef = useRef(true);
 
   const stats = useMemo(() => {
+    const verifyMode = isVisualVerifyMode();
+    if (verifyMode) {
+      playingRef.current = false;
+      autoCamRef.current = false;
+    }
+
     const nodes = graph.nodes as GraphNode[];
     let pub = 0;
     let priv = 0;
@@ -688,11 +695,11 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
 
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      const dt = Math.min(clock.getDelta(), 0.05);
-      const t = clock.elapsedTime;
+      const dt = verifyMode ? 0 : Math.min(clock.getDelta(), 0.05);
+      const t = verifyMode ? 0 : clock.elapsedTime;
       uniforms.uTime.value = t;
       grade.uniforms.uTime.value = t;
-      if (playingRef.current) flowTime += dt;
+      if (!verifyMode && playingRef.current) flowTime += dt;
 
       // Nutrient packets crawling the hyphal network.
       for (let i = 0; i < filaments.length; i++) {
@@ -709,7 +716,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
       packetPos.needsUpdate = true;
 
       // Spores rising through the shafts of light.
-      if (playingRef.current) {
+      if (!verifyMode && playingRef.current) {
         for (let i = 0; i < sporePos.count; i++) {
           let y = sporePos.getY(i) + sporeDrift.getY(i) * dt;
           const x = sporePos.getX(i) + Math.sin(t * 0.3 + i) * sporeDrift.getX(i) * dt;
@@ -740,7 +747,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
         light.intensity = colonyBase[i] * (0.78 + 0.22 * Math.sin(t * 0.6 + i * 1.7));
       });
 
-      if (autoCamRef.current) {
+      if (!verifyMode && autoCamRef.current) {
         // Slow handheld drift down the ravine.
         const breath = Math.sin(t * 0.11);
         camera.position.set(
