@@ -58,7 +58,7 @@ jobs:
           test -s visual/candidate.png
       - name: Build blind packet and metrics
         run: |
-          python3 -m pip install --disable-pip-version-check pillow numpy scikit-image
+          python3 -m pip install --disable-pip-version-check pillow==12.3.0 numpy==2.5.3 scikit-image==0.26.0
           python3 scripts/visual-fidelity.py             --reference public/dream-targets/catalog/mycelium/v2-cinematic-cavern.png             --candidate visual/candidate.png             --out-dir visual | tee visual/blind.log
       - name: Upload blind-only packet
         uses: actions/upload-artifact@v4
