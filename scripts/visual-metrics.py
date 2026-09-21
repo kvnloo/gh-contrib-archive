@@ -53,6 +53,11 @@ def edge_image(image: Image.Image) -> np.ndarray:
     return data
 
 
+def blurred_rgb(image: Image.Image, radius: float = 3.0) -> np.ndarray:
+    blurred = image.filter(ImageFilter.GaussianBlur(radius=radius))
+    return arr(blurred)
+
+
 def compare(target: Image.Image, render: Image.Image) -> dict:
     if render.size != target.size:
         render = render.resize(target.size, Image.Resampling.LANCZOS)
@@ -67,6 +72,14 @@ def compare(target: Image.Image, render: Image.Image) -> dict:
     ssim_rgb = float(
         structural_similarity(ta, ra, channel_axis=2, data_range=1.0)
     )
+    ssim_blurred = float(
+        structural_similarity(
+            blurred_rgb(target),
+            blurred_rgb(render),
+            channel_axis=2,
+            data_range=1.0,
+        )
+    )
     edge_t = edge_image(target)
     edge_r = edge_image(render)
     edge_ssim = safe_ssim(edge_t, edge_r)
@@ -79,6 +92,7 @@ def compare(target: Image.Image, render: Image.Image) -> dict:
 
     return {
         "ssim_rgb": ssim_rgb,
+        "ssim_blurred": ssim_blurred,
         "ssim_edges": edge_ssim,
         "mae": mae,
         "rmse": rmse,
@@ -149,8 +163,8 @@ def main() -> int:
         "",
         "Machine metrics are intentionally componentized; there is no single opaque pass/fail score.",
         "",
-        "| world | run stability SSIM | target SSIM | edge SSIM | pHash Δ | bright centroid Δ | MAE |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "| world | stability raw | stability blurred | target raw | target blurred | edge SSIM | pHash Δ | bright centroid Δ | MAE |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
 
     for spec in specs:
@@ -179,10 +193,12 @@ def main() -> int:
             "run_a_vs_run_b": stability,
         }
         md.append(
-            "| {world} | {stable:.4f} | {ssim:.4f} | {edge:.4f} | {phash} | {centroid:.4f} | {mae:.4f} |".format(
+            "| {world} | {stable:.4f} | {stable_blur:.4f} | {ssim:.4f} | {ssim_blur:.4f} | {edge:.4f} | {phash} | {centroid:.4f} | {mae:.4f} |".format(
                 world=world,
                 stable=stability["ssim_rgb"],
+                stable_blur=stability["ssim_blurred"],
                 ssim=target_to_a["ssim_rgb"],
+                ssim_blur=target_to_a["ssim_blurred"],
                 edge=target_to_a["ssim_edges"],
                 phash=target_to_a["phash_distance"],
                 centroid=target_to_a["bright_centroid_distance"],
@@ -199,7 +215,7 @@ def main() -> int:
     unstable = [
         world
         for world, values in report.items()
-        if values["run_a_vs_run_b"]["ssim_rgb"] < 0.985
+        if values["run_a_vs_run_b"]["ssim_blurred"] < 0.995
     ]
     if unstable:
         print(
