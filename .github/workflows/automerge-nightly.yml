@@ -28,4 +28,5 @@ jobs:
             gh pr merge "$PR" --merge --auto --delete-branch=false
           else
             echo "scheme forbids nightly automerge"
+            exit 1
           fi

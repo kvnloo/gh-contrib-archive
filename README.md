@@ -4,7 +4,7 @@ Public-safe visualization of [**@kvnloo**](https://github.com/kvnloo) GitHub his
 
 Five graph worlds (keys 1–5): `/worlds`. Ledger: `/`.
 
-This tree follows the [Verified OSS Loop](https://github.com/kvnloo/verified-oss-loop). CI is GitHub Actions (`npm test` + `npm run build`). There is **no GitHub Pages site** yet — Next.js here is not a static export.
+This tree follows the [Verified OSS Loop](https://github.com/kvnloo/verified-oss-loop). CI is GitHub Actions (`npm test` + `npm run build`). The public site is the static export on GitHub Pages: [kvnloo.github.io/gh-contrib-archive](https://kvnloo.github.io/gh-contrib-archive/). Pushes to `main` publish it.
 
 ## Privacy
 
