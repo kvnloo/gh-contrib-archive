@@ -33,7 +33,7 @@ jobs:
           node -e "require('node:fs').writeFileSync('public/release.json', JSON.stringify({revision:process.env.GITHUB_SHA,builtAt:new Date().toISOString(),source:'public snapshot only'}))"
       - run: npm run build
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Upload static export
         uses: actions/upload-pages-artifact@v4
         with:
