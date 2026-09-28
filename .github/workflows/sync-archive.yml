@@ -43,4 +43,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "sync: refresh public contribution archive"
-          git push
+          cp data/public.db /tmp/public.db.sync
+          git fetch origin main
+          git checkout -B main origin/main
+          cp /tmp/public.db.sync data/public.db
+          git add data/public.db
+          if git diff --cached --quiet; then
+            echo "public.db unchanged after rebase"
+            exit 0
+          fi
+          git commit -m "sync: refresh public contribution archive"
+          git push origin HEAD:main
