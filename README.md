@@ -14,7 +14,17 @@ The website is public-safe:
 - **Private** repos: the row exists (type + date) with no title, message, repo name, SHA, or URL.
 - **Private commits**: yearly totals only. Public commits link to GitHub’s `commits?author=` list, not to patches.
 
-`data/github.db` is the local full archive (gitignored). `data/public.db` is what the site reads and what this repo ships.
+`data/github.db` is the local full archive (gitignored). `data/public.db` is what the site reads and what this repo ships. The private database is not stored on GitHub and cannot be downloaded.
+
+## Local copy
+
+The repository is public. Download or update it without a token:
+
+```bash
+scripts/pull-public.sh /path/to/gh-contrib-archive
+```
+
+That fetches the public HTTPS URL with `GH_TOKEN` and `GH_ARCHIVE_TOKEN` removed, disables the credential helper for the checkout, and checks `data/public.db` against the git blob. Do not put a token in the remote URL. Civ reads the sibling checkout at `../gh-contrib-archive/data/public.db`.
 
 ## Run
 
