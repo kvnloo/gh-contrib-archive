@@ -51,8 +51,8 @@ pull_public() {
       echo "refusing to update a checkout with local changes" >&2
       return 1
     fi
-    git_public -C "$dest" fetch --depth 1 "$PUBLIC_URL" "$BRANCH"
-    git_public -C "$dest" checkout -B "$BRANCH" FETCH_HEAD
+    git_public -C "$dest" fetch --depth 1 "$PUBLIC_URL" "+${BRANCH}:refs/remotes/origin/${BRANCH}"
+    git_public -C "$dest" checkout -B "$BRANCH" "origin/$BRANCH"
   fi
 
   local db blob local_hash
