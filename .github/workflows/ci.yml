@@ -32,6 +32,7 @@ jobs:
           test -f out/api/v1/index.json
           test -f out/api/v1/queues.json
           test -f out/api/v1/recent.json
+          test -f out/api/v1/actors.json
           test -f out/api/v1/attention.json
           test -f out/api/v1/contributions.json
           test -f out/api/v1/repos.json
