@@ -161,6 +161,7 @@ describe("public GitHub read API", () => {
     assert.equal(api.repoResources.has("mystery/unknown-repo"), false);
     assert.deepEqual(api.recent.items.map((item) => item.repo), ["example/public-repo"]);
     assert.equal(api.recent.items[0]?.href, "threads/example/public-repo/7.json");
+    assert.deepEqual(api.actors.actors.map((actor) => actor.login), ["maintainer"]);
 
     const publicRepoFile = path.join(
       outputRoot,
@@ -208,6 +209,15 @@ describe("public GitHub read API", () => {
       fs.readFileSync(publicThreadFile, "utf8").includes("private-maintainer"),
       false,
     );
+    const actorFile = path.join(
+      outputRoot,
+      "api",
+      "v1",
+      "actors",
+      "maintainer.json",
+    );
+    assert.equal(fs.existsSync(actorFile), true);
+    assert.equal(fs.readFileSync(actorFile, "utf8").includes("private-maintainer"), false);
   });
   it("materializes action queues from public attention only", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-public-queues-"));
