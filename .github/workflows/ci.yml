@@ -30,6 +30,7 @@ jobs:
           test -f out/data/archive.json
           test -f out/data/manifest.json
           test -f out/api/v1/index.json
+          test -f out/api/v1/changes.json
           test -f out/api/v1/attention.json
           test -f out/api/v1/contributions.json
           test -f out/api/v1/repos.json
