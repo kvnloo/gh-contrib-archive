@@ -109,6 +109,8 @@ describe("public GitHub read API", () => {
     assert.deepEqual(api.attention.items.map((item) => item.repo), ["example/public-repo"]);
     assert.equal(api.repoResources.has("secret/private-repo"), false);
     assert.equal(api.repoResources.has("mystery/unknown-repo"), false);
+    assert.deepEqual(api.recent.items.map((item) => item.repo), ["example/public-repo"]);
+    assert.equal(api.recent.items[0]?.href, "threads/example/public-repo/7.json");
 
     const publicRepoFile = path.join(
       outputRoot,
@@ -140,6 +142,11 @@ describe("public GitHub read API", () => {
       path.join(outputRoot, "api", "v1", "contributions.json"),
       "utf8",
     );
+    const recent = fs.readFileSync(
+      path.join(outputRoot, "api", "v1", "recent.json"),
+      "utf8",
+    );
+    assert.equal(recent.includes("secret/private-repo"), false);
     assert.equal(deployed.includes("PRIVATE BODY"), false);
     assert.equal(deployed.includes("Private title"), false);
     assert.equal(deployed.includes("secret/private-repo"), false);
