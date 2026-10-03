@@ -24,6 +24,11 @@ import {
   type PublicActorIndexRow,
   type PublicActorResource,
 } from "./actor-index.ts";
+import {
+  filterSemanticGraph,
+  readSemanticGraph,
+  type PublicSemanticGraph,
+} from "./semantic-graph.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
@@ -44,6 +49,7 @@ export type PublicApiIndex = {
     recent: string;
     actors: string;
     actor: string;
+    semantic: string;
     attention: string;
     contributions: string;
     repos: string;
@@ -121,6 +127,7 @@ export type CompiledPublicApi = {
   queues: PublicWorkQueues;
   recent: PublicRecentThreads;
   actors: PublicActors;
+  semantic: PublicSemanticGraph;
   attention: PublicAttention;
   contributions: PublicArchive;
   repos: PublicRepoIndex;
@@ -221,6 +228,16 @@ export function compilePublicApi(
   const publicItems = snapshot.archive.items.filter(
     (item): item is Extract<PublicArchiveItem, { visibility: "public" }> =>
       item.visibility === "public",
+  );
+
+  const allowedSemanticRepos = new Set(
+    publicItems
+      .map((item) => item.repo)
+      .filter((repo): repo is string => typeof repo === "string"),
+  );
+  const semantic = filterSemanticGraph(
+    readSemanticGraph(path.join(path.dirname(publicDbPath), "semantic-graph.json")),
+    allowedSemanticRepos,
   );
 
   const itemsByRepo = new Map<string, PublicArchiveItem[]>();
@@ -354,6 +371,7 @@ export function compilePublicApi(
       recent: "recent.json",
       actors: "actors.json",
       actor: "actors/{login}.json",
+      semantic: "semantic.json",
       attention: "attention.json",
       contributions: "contributions.json",
       repos: "repos.json",
@@ -373,6 +391,7 @@ export function compilePublicApi(
     queues,
     recent,
     actors,
+    semantic,
     attention,
     contributions: snapshot.archive,
     repos,
@@ -401,6 +420,7 @@ export function writePublicApi(
   writeJson(path.join(root, "queues.json"), compiled.queues);
   writeJson(path.join(root, "recent.json"), compiled.recent);
   writeJson(path.join(root, "actors.json"), compiled.actors);
+  writeJson(path.join(root, "semantic.json"), compiled.semantic);
   writeJson(path.join(root, "attention.json"), compiled.attention);
   writeJson(path.join(root, "contributions.json"), compiled.contributions);
   writeJson(path.join(root, "repos.json"), compiled.repos);
