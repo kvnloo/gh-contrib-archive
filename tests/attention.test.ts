@@ -9,6 +9,7 @@ import {
 function snapshot(overrides: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot {
   return {
     repo: "pingdotgg/t3code",
+    repoVisibility: "public",
     number: 14236,
     title: "fix composer",
     url: "https://github.com/pingdotgg/t3code/pull/14236",
@@ -116,5 +117,64 @@ describe("attention classification", () => {
     );
     assert.equal(JSON.stringify(result).includes("ghp_DO_NOT_STORE"), false);
     assert.equal("activities" in result, false);
+  });
+
+  it("carries live repository visibility into normalized state", () => {
+    assert.equal(classifyPullRequest(snapshot({ repoVisibility: "private" }), "kvnloo").repoVisibility, "private");
+    assert.equal(classifyPullRequest(snapshot({ repoVisibility: "unknown" }), "kvnloo").repoVisibility, "unknown");
+  });
+  it("does not make positive review evidence P0 merely because it mentions tests", () => {
+    const result = classifyPullRequest(
+      snapshot({
+        activities: [
+          {
+            actor: "reviewer",
+            body: "Tests passed. No new finding in this focused pass.",
+            at: "2026-10-03T02:37:42Z",
+            kind: "review",
+            reviewState: "COMMENTED",
+          },
+        ],
+      }),
+      "kvnloo",
+    );
+    assert.equal(result.priority, "P2");
+    assert.equal(result.blocker, "review_update_no_action");
+  });
+
+  it("makes concrete requested regression additions P0", () => {
+    const result = classifyPullRequest(
+      snapshot({
+        activities: [
+          {
+            actor: "reviewer",
+            body: "One useful addition is a test against React Native's installed version catalog.",
+            at: "2026-10-03T03:00:00Z",
+            kind: "comment",
+          },
+        ],
+      }),
+      "kvnloo",
+    );
+    assert.equal(result.priority, "P0");
+    assert.equal(result.blocker, "verification_requested");
+  });
+
+  it("marks an explicitly competing implementation as a superseded candidate", () => {
+    const result = classifyPullRequest(
+      snapshot({
+        activities: [
+          {
+            actor: "maintainer",
+            body: "We will likely merge #3806 in favor of this as it fixes the issue upstream.",
+            at: "2026-10-03T03:30:00Z",
+            kind: "comment",
+          },
+        ],
+      }),
+      "kvnloo",
+    );
+    assert.equal(result.priority, "P1");
+    assert.equal(result.blocker, "superseded_candidate");
   });
 });

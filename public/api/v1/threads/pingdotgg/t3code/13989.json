@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "privacy": "public-safe",
+  "repo": "pingdotgg/t3code",
+  "number": 13989,
+  "contributions": [],
+  "attention": [
+    {
+      "repo": "pingdotgg/t3code",
+      "number": 13989,
+      "title": "fix(usage): dedupe shared Windows and WSL sources",
+      "url": "https://github.com/pingdotgg/t3code/pull/13989",
+      "priority": "P0",
+      "blocker": "verification_and_scope_approval_requested",
+      "nextAction": "run current-head Windows/WSL verification including mixed managed/standalone sources and link explicit maintainer agreement on the cross-runtime identity design",
+      "updatedAt": "2026-10-01T16:02:35Z",
+      "lastExternalAt": "2026-10-01T16:02:35Z",
+      "lastSelfAt": null,
+      "ciState": "none",
+      "reviewDecision": null,
+      "mergeState": null
+    }
+  ]
+}

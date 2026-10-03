@@ -5,6 +5,7 @@ import {
   type AttentionActivity,
   type AttentionCheck,
   type PullRequestSnapshot,
+  type RepositoryVisibility,
 } from "../lib/attention.ts";
 import { openAttentionDb, replaceAttentionRecords } from "../lib/attention-db.ts";
 
@@ -93,6 +94,25 @@ function activity(
   };
 }
 
+const visibilityCache = new Map<string, RepositoryVisibility>();
+
+function repositoryVisibility(repo: string): RepositoryVisibility {
+  const cached = visibilityCache.get(repo);
+  if (cached) return cached;
+  let visibility: RepositoryVisibility = "unknown";
+  try {
+    const raw = ghJson(["repo", "view", repo, "--json", "visibility"]) as Json;
+    const value = String(raw.visibility ?? "").toLowerCase();
+    if (value === "public" || value === "private" || value === "internal") {
+      visibility = value;
+    }
+  } catch {
+    // Fail closed: an inaccessible or failed lookup must never be assumed public.
+  }
+  visibilityCache.set(repo, visibility);
+  return visibility;
+}
+
 function snapshotFor(
   repo: string,
   number: number,
@@ -127,6 +147,7 @@ function snapshotFor(
 
   return {
     repo,
+    repoVisibility: repositoryVisibility(repo),
     number,
     title: String(raw.title ?? `${repo}#${number}`),
     url: String(raw.url ?? `https://github.com/${repo}/pull/${number}`),
@@ -172,4 +193,7 @@ try {
 
 const p0 = sorted.filter((item) => item.priority === "P0").length;
 const p1 = sorted.filter((item) => item.priority === "P1").length;
-console.log(`Synced ${sorted.length} authored open PRs (${p0} P0, ${p1} P1).`);
+const publicCount = sorted.filter((item) => item.repoVisibility === "public").length;
+console.log(
+  `Synced ${sorted.length} authored open PRs (${p0} P0, ${p1} P1, ${publicCount} public).`,
+);

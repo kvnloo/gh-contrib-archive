@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { AttentionRecord } from "./attention.ts";
+import type { AttentionRecord, RepositoryVisibility } from "./attention.ts";
 
 export const ATTENTION_DB_PATH = path.join(process.cwd(), "data", "attention.db");
 
@@ -12,6 +12,7 @@ export function openAttentionDb(dbPath = ATTENTION_DB_PATH) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS attention_prs (
       repo TEXT NOT NULL,
+      repo_visibility TEXT NOT NULL DEFAULT 'unknown',
       number INTEGER NOT NULL,
       title TEXT NOT NULL,
       url TEXT NOT NULL,
@@ -31,6 +32,13 @@ export function openAttentionDb(dbPath = ATTENTION_DB_PATH) {
       value TEXT NOT NULL
     );
   `);
+
+  const columns = db.prepare("PRAGMA table_info(attention_prs)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "repo_visibility")) {
+    db.exec(
+      "ALTER TABLE attention_prs ADD COLUMN repo_visibility TEXT NOT NULL DEFAULT 'unknown'",
+    );
+  }
   return db;
 }
 
@@ -41,9 +49,9 @@ export function replaceAttentionRecords(
 ) {
   const insert = db.prepare(`
     INSERT INTO attention_prs (
-      repo, number, title, url, priority, blocker, next_action, updated_at,
+      repo, repo_visibility, number, title, url, priority, blocker, next_action, updated_at,
       last_external_at, last_self_at, ci_state, review_decision, merge_state
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   db.exec("BEGIN");
   try {
@@ -51,6 +59,7 @@ export function replaceAttentionRecords(
     for (const record of records) {
       insert.run(
         record.repo,
+        record.repoVisibility,
         record.number,
         record.title,
         record.url,
@@ -77,7 +86,7 @@ export function replaceAttentionRecords(
 
 export function readAttentionRecords(db: DatabaseSync, limit = 20): AttentionRecord[] {
   const rows = db.prepare(`
-    SELECT repo, number, title, url, priority, blocker, next_action, updated_at,
+    SELECT repo, repo_visibility, number, title, url, priority, blocker, next_action, updated_at,
            last_external_at, last_self_at, ci_state, review_decision, merge_state
     FROM attention_prs
     ORDER BY CASE priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 ELSE 2 END, updated_at DESC
@@ -86,6 +95,7 @@ export function readAttentionRecords(db: DatabaseSync, limit = 20): AttentionRec
 
   return rows.map((row) => ({
     repo: String(row.repo),
+    repoVisibility: String(row.repo_visibility ?? "unknown") as RepositoryVisibility,
     number: Number(row.number),
     title: String(row.title),
     url: String(row.url),
@@ -99,4 +109,11 @@ export function readAttentionRecords(db: DatabaseSync, limit = 20): AttentionRec
     reviewDecision: row.review_decision === null ? null : String(row.review_decision),
     mergeState: row.merge_state === null ? null : String(row.merge_state),
   }));
+}
+
+export function readAttentionSyncedAt(db: DatabaseSync): string | null {
+  const row = db.prepare("SELECT value FROM attention_meta WHERE key = 'last_sync_at'").get() as
+    | { value: string }
+    | undefined;
+  return row?.value ?? null;
 }
