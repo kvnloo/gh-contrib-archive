@@ -16,6 +16,8 @@ import {
   readThreadEventsSeed,
   type PublicThreadEvent,
 } from "./public-thread-events.ts";
+import { buildWorkQueues, type WorkQueueName } from "./work-queues.ts";
+import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
@@ -32,6 +34,8 @@ export type PublicApiIndex = {
   };
   endpoints: {
     index: string;
+    queues: string;
+    recent: string;
     attention: string;
     contributions: string;
     repos: string;
@@ -47,6 +51,22 @@ export type PublicAttention = {
   updatedAt: string | null;
   count: number;
   items: PublicAttentionItem[];
+};
+
+export type PublicWorkQueues = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  updatedAt: string | null;
+  counts: Record<WorkQueueName, number>;
+  queues: Record<WorkQueueName, PublicAttentionItem[]>;
+};
+
+export type PublicRecentThreads = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  generatedAt: string;
+  count: number;
+  items: RecentThread[];
 };
 
 export type PublicRepoIndex = {
@@ -83,6 +103,8 @@ type PublicThreadResource = {
 
 export type CompiledPublicApi = {
   index: PublicApiIndex;
+  queues: PublicWorkQueues;
+  recent: PublicRecentThreads;
   attention: PublicAttention;
   contributions: PublicArchive;
   repos: PublicRepoIndex;
@@ -251,6 +273,26 @@ export function compilePublicApi(
     }
   }
 
+  const groupedQueues = buildWorkQueues(attentionItems);
+  const queues: PublicWorkQueues = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe",
+    updatedAt: attentionState.updatedAt,
+    counts: Object.fromEntries(
+      Object.entries(groupedQueues).map(([name, items]) => [name, items.length]),
+    ) as Record<WorkQueueName, number>,
+    queues: groupedQueues,
+  };
+
+  const recentItems = buildRecentThreads(publicItems, attentionItems);
+  const recent: PublicRecentThreads = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe",
+    generatedAt: laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt),
+    count: recentItems.length,
+    items: recentItems,
+  };
+
   const attention: PublicAttention = {
     schemaVersion: PUBLIC_API_SCHEMA,
     privacy: "public-safe",
@@ -277,6 +319,8 @@ export function compilePublicApi(
     },
     endpoints: {
       index: "index.json",
+      queues: "queues.json",
+      recent: "recent.json",
       attention: "attention.json",
       contributions: "contributions.json",
       repos: "repos.json",
@@ -293,6 +337,8 @@ export function compilePublicApi(
 
   return {
     index,
+    queues,
+    recent,
     attention,
     contributions: snapshot.archive,
     repos,
@@ -317,6 +363,8 @@ export function writePublicApi(
   };
 
   writeJson(path.join(root, "index.json"), compiled.index);
+  writeJson(path.join(root, "queues.json"), compiled.queues);
+  writeJson(path.join(root, "recent.json"), compiled.recent);
   writeJson(path.join(root, "attention.json"), compiled.attention);
   writeJson(path.join(root, "contributions.json"), compiled.contributions);
   writeJson(path.join(root, "repos.json"), compiled.repos);
