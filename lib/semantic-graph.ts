@@ -189,3 +189,28 @@ export function readSemanticGraph(filePath: string): PublicSemanticGraph {
     return emptySemanticGraph();
   }
 }
+
+export function filterSemanticGraph(
+  graph: PublicSemanticGraph,
+  allowedRepos: ReadonlySet<string>,
+): PublicSemanticGraph {
+  const hotset = graph.hotset.filter((item) => allowedRepos.has(item.repo));
+  const concepts = graph.concepts.map((concept) => ({
+    ...concept,
+    repos: concept.repos.filter((item) => allowedRepos.has(item.repo)),
+  }));
+  const repoLinks = graph.repoLinks.filter(
+    (link) => allowedRepos.has(link.source) && allowedRepos.has(link.target),
+  );
+  const stable = {
+    schemaVersion: SEMANTIC_GRAPH_SCHEMA,
+    privacy: "public-safe" as const,
+    source: graph.source,
+    gitnexusVersion: graph.gitnexusVersion,
+    embeddings: graph.embeddings,
+    hotset,
+    concepts,
+    repoLinks,
+  };
+  return { ...stable, revision: stableRevision(stable) };
+}
