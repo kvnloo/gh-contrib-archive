@@ -144,4 +144,47 @@ describe("public GitHub read API", () => {
     assert.equal(deployed.includes("Private title"), false);
     assert.equal(deployed.includes("secret/private-repo"), false);
   });
+  it("uses the tracked public-safe seed when the local attention database is absent", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-public-api-seed-"));
+    const publicDbPath = path.join(root, "public.db");
+    const attentionDbPath = path.join(root, "attention.db");
+    const outputRoot = path.join(root, "public");
+
+    const publicDb = openDb(publicDbPath);
+    try {
+      publicDb.prepare("INSERT INTO meta(key, value) VALUES('login', 'kvnloo')").run();
+    } finally {
+      publicDb.close();
+    }
+
+    fs.writeFileSync(
+      path.join(root, "attention-seed.json"),
+      JSON.stringify({
+        updatedAt: "2026-10-03T19:25:00Z",
+        items: [
+          attention("pingdotgg/t3code", "public", 13967),
+          attention("secret/private-repo", "private", 3),
+          attention("mystery/unknown-repo", "unknown", 9),
+        ],
+      }),
+      "utf8",
+    );
+
+    const api = writePublicApi(publicDbPath, attentionDbPath, outputRoot);
+    assert.deepEqual(api.attention.items.map((item) => item.repo), ["pingdotgg/t3code"]);
+    assert.equal(api.attention.updatedAt, "2026-10-03T19:25:00Z");
+    assert.equal(
+      fs.existsSync(
+        path.join(outputRoot, "api", "v1", "threads", "pingdotgg", "t3code", "13967.json"),
+      ),
+      true,
+    );
+
+    const deployed = fs.readFileSync(
+      path.join(outputRoot, "api", "v1", "attention.json"),
+      "utf8",
+    );
+    assert.equal(deployed.includes("secret/private-repo"), false);
+    assert.equal(deployed.includes("mystery/unknown-repo"), false);
+  });
 });
