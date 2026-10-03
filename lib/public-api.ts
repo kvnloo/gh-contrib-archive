@@ -12,6 +12,10 @@ import {
   type PublicArchiveItem,
   type PublicArchive,
 } from "./public-snapshot.ts";
+import {
+  readThreadEventsSeed,
+  type PublicThreadEvent,
+} from "./public-thread-events.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
@@ -72,6 +76,9 @@ type PublicThreadResource = {
   number: number;
   contributions: PublicArchiveItem[];
   attention: PublicAttentionItem[];
+  events: PublicThreadEvent[];
+  eventsUpdatedAt: string | null;
+  eventSourceUpdatedAt: string | null;
 };
 
 export type CompiledPublicApi = {
@@ -167,6 +174,9 @@ export function compilePublicApi(
 ): CompiledPublicApi {
   const snapshot = compilePublicSnapshot(publicDbPath);
   const attentionState = readPublicAttention(attentionDbPath);
+  const threadEventsState = readThreadEventsSeed(
+    path.join(path.dirname(attentionDbPath), "thread-events-seed.json"),
+  );
   const attentionItems = attentionState.records.map(publicAttentionItem);
 
   const publicItems = snapshot.archive.items.filter(
@@ -224,6 +234,7 @@ export function compilePublicApi(
     for (const item of attention) numbers.add(item.number);
 
     for (const number of [...numbers].sort((a, b) => a - b)) {
+      const eventState = threadEventsState?.threads[`${repo}#${number}`] ?? null;
       threadResources.set(`${repo}#${number}`, {
         schemaVersion: PUBLIC_API_SCHEMA,
         privacy: "public-safe",
@@ -233,6 +244,9 @@ export function compilePublicApi(
           (item) => item.visibility === "public" && item.number === number,
         ),
         attention: attention.filter((item) => item.number === number),
+        events: eventState?.events ?? [],
+        eventsUpdatedAt: eventState ? threadEventsState?.updatedAt ?? null : null,
+        eventSourceUpdatedAt: eventState?.sourceUpdatedAt ?? null,
       });
     }
   }
