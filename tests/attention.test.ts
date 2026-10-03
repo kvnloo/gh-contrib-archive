@@ -9,6 +9,7 @@ import {
 function snapshot(overrides: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot {
   return {
     repo: "pingdotgg/t3code",
+    repoVisibility: "public",
     number: 14236,
     title: "fix composer",
     url: "https://github.com/pingdotgg/t3code/pull/14236",
@@ -116,5 +117,10 @@ describe("attention classification", () => {
     );
     assert.equal(JSON.stringify(result).includes("ghp_DO_NOT_STORE"), false);
     assert.equal("activities" in result, false);
+  });
+
+  it("carries live repository visibility into normalized state", () => {
+    assert.equal(classifyPullRequest(snapshot({ repoVisibility: "private" }), "kvnloo").repoVisibility, "private");
+    assert.equal(classifyPullRequest(snapshot({ repoVisibility: "unknown" }), "kvnloo").repoVisibility, "unknown");
   });
 });
