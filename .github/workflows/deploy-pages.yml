@@ -35,14 +35,16 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Refresh authored-PR attention cache
+      - name: Refresh public authored-PR attention hotset
+        run: npm run inbox:public-sync
+      - name: Enrich attention cache from GitHub notifications when configured
         env:
           GH_TOKEN: ${{ secrets.GH_INBOX_TOKEN }}
         run: |
           if [ -n "$GH_TOKEN" ]; then
             npm run inbox:sync
           else
-            echo "GH_INBOX_TOKEN is not configured; publishing archive API without live attention rows."
+            echo "GH_INBOX_TOKEN is optional; public attention data was refreshed without credentials."
           fi
       - run: npm test
       - run: npm run build
