@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || 'nightly' }}
+          ref: ${{ inputs.ref || github.ref_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -60,7 +60,7 @@ jobs:
       pages: write
       id-token: write
     environment:
-      name: github-pages
+      name: archive-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy
