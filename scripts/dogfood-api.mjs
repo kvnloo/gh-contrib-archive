@@ -50,6 +50,13 @@ for (const repo of changes.repos) {
     invariant(child.value.revision === thread.revision, `${repo.repo}#${thread.number}: stale thread revision`);
     invariant(child.value.repo === repo.repo, `${thread.href}: thread/repo identity mismatch`);
     invariant(child.value.number === thread.number, `${thread.href}: thread number mismatch`);
+    for (const event of child.value.events ?? []) {
+      invariant(!("body" in event), `${thread.href}: raw event body leaked`);
+      invariant(
+        child.value.evidenceRefs?.includes(event.id),
+        `${thread.href}: event ${event.id} missing evidence ref`,
+      );
+    }
     threads += 1;
   }
 }

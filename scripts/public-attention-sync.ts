@@ -9,6 +9,22 @@ import {
 
 type Json = Record<string, any>;
 
+type PublicThreadEvent = {
+  id: string;
+  kind: "comment" | "review";
+  actor: string;
+  at: string;
+  reviewState: string | null;
+  url: string | null;
+};
+
+type PublicThreadEventRow = {
+  repo: string;
+  repoVisibility: "public";
+  number: number;
+  events: PublicThreadEvent[];
+};
+
 const login = process.env.GITHUB_PUBLIC_LOGIN?.trim() || "kvnloo";
 const deepLimit = Math.max(
   1,
@@ -58,12 +74,38 @@ function activity(
   };
 }
 
-async function deepActivities(repo: string, number: number): Promise<AttentionActivity[]> {
+function publicThreadEvent(
+  item: Json,
+  kind: "comment" | "review",
+  at: unknown,
+  reviewState?: unknown,
+): PublicThreadEvent | null {
+  const actor = String(item.user?.login ?? "");
+  const timestamp = String(at ?? "");
+  const numericId = Number(item.id);
+  if (!actor || !timestamp || !Number.isFinite(numericId)) return null;
+  return {
+    id: `${kind}:${numericId}`,
+    kind,
+    actor,
+    at: timestamp,
+    reviewState: reviewState == null ? null : String(reviewState),
+    url:
+      typeof item.html_url === "string" && item.html_url.startsWith("https://github.com/")
+        ? item.html_url
+        : null,
+  };
+}
+
+async function deepActivities(
+  repo: string,
+  number: number,
+): Promise<{ activities: AttentionActivity[]; events: PublicThreadEvent[] }> {
   const [comments, reviews] = await Promise.all([
     githubJson(`${API}/repos/${repo}/issues/${number}/comments?per_page=100`) as Promise<Json[]>,
     githubJson(`${API}/repos/${repo}/pulls/${number}/reviews?per_page=100`) as Promise<Json[]>,
   ]);
-  return [
+  const activities = [
     ...comments.map((item) =>
       activity(item.user, item.body, item.created_at, "comment"),
     ),
@@ -71,6 +113,12 @@ async function deepActivities(repo: string, number: number): Promise<AttentionAc
       activity(item.user, item.body, item.submitted_at, "review", item.state),
     ),
   ].filter(Boolean) as AttentionActivity[];
+  const events = [
+    ...comments.map((item) => publicThreadEvent(item, "comment", item.created_at)),
+    ...reviews.map((item) => publicThreadEvent(item, "review", item.submitted_at, item.state)),
+  ].filter(Boolean) as PublicThreadEvent[];
+  events.sort((a, b) => a.at.localeCompare(b.at));
+  return { activities, events };
 }
 
 function snapshotFromSearch(
@@ -111,21 +159,33 @@ async function main() {
   );
 
   const records = [];
+  const threads: PublicThreadEventRow[] = [];
   let deepInspected = 0;
   for (const item of items) {
     const repo = repoFromApiUrl(item.repository_url);
     if (!repo || !Number.isFinite(Number(item.number))) continue;
 
     let activities: AttentionActivity[] = [];
+    let events: PublicThreadEvent[] = [];
     if (deepKeys.has(String(item.id))) {
       try {
-        activities = await deepActivities(repo, Number(item.number));
+        const deep = await deepActivities(repo, Number(item.number));
+        activities = deep.activities;
+        events = deep.events;
         deepInspected += 1;
       } catch (error) {
         console.warn(
           `attention deep inspection skipped for ${repo}#${item.number}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
+    }
+    if (events.length > 0) {
+      threads.push({
+        repo,
+        repoVisibility: "public",
+        number: Number(item.number),
+        events,
+      });
     }
     records.push(classifyPullRequest(snapshotFromSearch(item, repo, activities), login));
   }
@@ -141,6 +201,7 @@ async function main() {
     deepInspected,
     deepLimit,
     items: sorted,
+    threads,
   };
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -148,7 +209,7 @@ async function main() {
   const p0 = sorted.filter((item) => item.priority === "P0").length;
   const p1 = sorted.filter((item) => item.priority === "P1").length;
   console.log(
-    `Refreshed public attention hotset: ${sorted.length} PRs, ${deepInspected} deep-inspected, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} authored open PRs.`,
+    `Refreshed public attention hotset: ${sorted.length} PRs, ${deepInspected} deep-inspected, ${threads.length} thread event snapshots, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} authored open PRs.`,
   );
 }
 

@@ -17,6 +17,22 @@ import { contentRevision, prettyJsonBytes } from "./resource-revision.ts";
 export const PUBLIC_API_SCHEMA = 1 as const;
 
 export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility">;
+
+export type PublicThreadEvent = {
+  id: string;
+  kind: "comment" | "review";
+  actor: string;
+  at: string;
+  reviewState: string | null;
+  url: string | null;
+};
+
+type PublicThreadEventSeedRow = {
+  repo: string;
+  number: number;
+  events: PublicThreadEvent[];
+};
+
 type PublicContribution = Extract<PublicArchiveItem, { visibility: "public" }>;
 
 export type PublicResourceDescriptor = {
@@ -132,6 +148,7 @@ export type PublicThreadResource = {
   };
   contributions: PublicContribution[];
   attention: PublicAttentionItem[];
+  events: PublicThreadEvent[];
   evidenceRefs: string[];
   links: {
     self: string;
@@ -224,6 +241,57 @@ function readAttentionSeed(attentionDbPath: string): {
   }
 }
 
+function readPublicThreadEvents(attentionDbPath: string): PublicThreadEventSeedRow[] {
+  const seedPath = path.join(path.dirname(attentionDbPath), "attention-seed.json");
+  if (!fs.existsSync(seedPath)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(seedPath, "utf8")) as { threads?: unknown };
+    if (!Array.isArray(parsed.threads)) return [];
+    const rows: PublicThreadEventSeedRow[] = [];
+    for (const raw of parsed.threads) {
+      if (!raw || typeof raw !== "object") continue;
+      const row = raw as Record<string, unknown>;
+      if (
+        row.repoVisibility !== "public" ||
+        typeof row.repo !== "string" ||
+        safeRepoSegments(row.repo) === null ||
+        typeof row.number !== "number" ||
+        !Array.isArray(row.events)
+      ) {
+        continue;
+      }
+      const events: PublicThreadEvent[] = [];
+      for (const rawEvent of row.events) {
+        if (!rawEvent || typeof rawEvent !== "object") continue;
+        const event = rawEvent as Record<string, unknown>;
+        if (
+          typeof event.id !== "string" ||
+          (event.kind !== "comment" && event.kind !== "review") ||
+          typeof event.actor !== "string" ||
+          typeof event.at !== "string"
+        ) {
+          continue;
+        }
+        events.push({
+          id: event.id,
+          kind: event.kind,
+          actor: event.actor,
+          at: event.at,
+          reviewState: typeof event.reviewState === "string" ? event.reviewState : null,
+          url:
+            typeof event.url === "string" && event.url.startsWith("https://github.com/")
+              ? event.url
+              : null,
+        });
+      }
+      if (events.length > 0) rows.push({ repo: row.repo, number: row.number, events });
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 function readPublicAttention(attentionDbPath: string): {
   updatedAt: string | null;
   records: AttentionRecord[];
@@ -271,6 +339,7 @@ function buildThreadResource(
   number: number,
   contributions: PublicContribution[],
   attention: PublicAttentionItem[],
+  events: PublicThreadEvent[],
 ): PublicThreadResource {
   const [owner, name] = safeRepoSegments(repo)!;
   const root = contributions.find((item) =>
@@ -280,6 +349,7 @@ function buildThreadResource(
   const updatedAt = latestIso([
     ...contributions.map((item) => item.updated_at ?? item.created_at),
     ...attention.map((item) => item.updatedAt),
+    ...events.map((event) => event.at),
   ]);
   const derived = primaryAttention
     ? {
@@ -307,9 +377,11 @@ function buildThreadResource(
     derived,
     contributions,
     attention,
+    events,
     evidenceRefs: [
       ...contributions.map((item) => item.id),
       ...(primaryAttention ? [`attention:${repo}#${number}`] : []),
+      ...events.map((event) => event.id),
     ],
     links: {
       self: `threads/${owner}/${name}/${number}.json`,
@@ -326,6 +398,7 @@ export function compilePublicApi(
   const snapshot = compilePublicSnapshot(publicDbPath);
   const attentionState = readPublicAttention(attentionDbPath);
   const attentionItems = attentionState.records.map(publicAttentionItem);
+  const threadEventRows = readPublicThreadEvents(attentionDbPath);
 
   const publicItems = snapshot.archive.items.filter(
     (item): item is PublicContribution => item.visibility === "public",
@@ -346,9 +419,17 @@ export function compilePublicApi(
     attentionByRepo.set(item.repo, list);
   }
 
+  const threadEventsByRepo = new Map<string, PublicThreadEventSeedRow[]>();
+  for (const row of threadEventRows) {
+    const list = threadEventsByRepo.get(row.repo) ?? [];
+    list.push(row);
+    threadEventsByRepo.set(row.repo, list);
+  }
+
   const repoNames = new Set<string>([
     ...itemsByRepo.keys(),
     ...attentionByRepo.keys(),
+    ...threadEventsByRepo.keys(),
   ]);
 
   const repoResources = new Map<string, PublicRepoResource>();
@@ -358,6 +439,7 @@ export function compilePublicApi(
   for (const repo of [...repoNames].sort()) {
     const contributions = itemsByRepo.get(repo) ?? [];
     const attention = attentionByRepo.get(repo) ?? [];
+    const threadEvents = threadEventsByRepo.get(repo) ?? [];
     const [owner, name] = safeRepoSegments(repo)!;
 
     const numbers = new Set<number>();
@@ -365,6 +447,7 @@ export function compilePublicApi(
       if (item.number != null) numbers.add(item.number);
     }
     for (const item of attention) numbers.add(item.number);
+    for (const row of threadEvents) numbers.add(row.number);
 
     const threads: PublicThreadDescriptor[] = [];
     for (const number of [...numbers].sort((a, b) => a - b)) {
@@ -373,6 +456,10 @@ export function compilePublicApi(
         number,
         contributions.filter((item) => item.number === number),
         attention.filter((item) => item.number === number),
+        threadEvents
+          .filter((row) => row.number === number)
+          .flatMap((row) => row.events)
+          .sort((a, b) => a.at.localeCompare(b.at)),
       );
       threadResources.set(`${repo}#${number}`, resource);
       threads.push({
