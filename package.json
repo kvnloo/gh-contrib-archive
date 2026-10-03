@@ -17,7 +17,8 @@
     "inbox:next": "tsx scripts/inbox-next.ts",
     "inbox": "npm run inbox:sync && npm run inbox:next",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "inbox:public-sync": "tsx scripts/public-attention-sync.ts"
+    "inbox:public-sync": "tsx scripts/public-attention-sync.ts",
+    "semantic:refresh": "tsx scripts/gitnexus-semantic.ts"
   },
   "dependencies": {
     "next": "16.3.5",
