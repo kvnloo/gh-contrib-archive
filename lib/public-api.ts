@@ -12,6 +12,7 @@ import {
   type PublicArchiveItem,
   type PublicArchive,
 } from "./public-snapshot.ts";
+import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
@@ -28,6 +29,7 @@ export type PublicApiIndex = {
   };
   endpoints: {
     index: string;
+    recent: string;
     attention: string;
     contributions: string;
     repos: string;
@@ -43,6 +45,14 @@ export type PublicAttention = {
   updatedAt: string | null;
   count: number;
   items: PublicAttentionItem[];
+};
+
+export type PublicRecentThreads = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  generatedAt: string;
+  count: number;
+  items: RecentThread[];
 };
 
 export type PublicRepoIndex = {
@@ -76,6 +86,7 @@ type PublicThreadResource = {
 
 export type CompiledPublicApi = {
   index: PublicApiIndex;
+  recent: PublicRecentThreads;
   attention: PublicAttention;
   contributions: PublicArchive;
   repos: PublicRepoIndex;
@@ -237,6 +248,15 @@ export function compilePublicApi(
     }
   }
 
+  const recentItems = buildRecentThreads(publicItems, attentionItems);
+  const recent: PublicRecentThreads = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe",
+    generatedAt: laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt),
+    count: recentItems.length,
+    items: recentItems,
+  };
+
   const attention: PublicAttention = {
     schemaVersion: PUBLIC_API_SCHEMA,
     privacy: "public-safe",
@@ -263,6 +283,7 @@ export function compilePublicApi(
     },
     endpoints: {
       index: "index.json",
+      recent: "recent.json",
       attention: "attention.json",
       contributions: "contributions.json",
       repos: "repos.json",
@@ -279,6 +300,7 @@ export function compilePublicApi(
 
   return {
     index,
+    recent,
     attention,
     contributions: snapshot.archive,
     repos,
@@ -303,6 +325,7 @@ export function writePublicApi(
   };
 
   writeJson(path.join(root, "index.json"), compiled.index);
+  writeJson(path.join(root, "recent.json"), compiled.recent);
   writeJson(path.join(root, "attention.json"), compiled.attention);
   writeJson(path.join(root, "contributions.json"), compiled.contributions);
   writeJson(path.join(root, "repos.json"), compiled.repos);
