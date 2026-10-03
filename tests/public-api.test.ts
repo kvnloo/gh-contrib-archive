@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { openAttentionDb, replaceAttentionRecords } from "../lib/attention-db.ts";
 import { openDb } from "../lib/db.ts";
 import { writePublicApi } from "../lib/public-api.ts";
+import { writeThreadEventsSeed } from "../lib/public-thread-events.ts";
 import type { AttentionRecord } from "../lib/attention.ts";
 
 function attention(
@@ -104,6 +105,53 @@ describe("public GitHub read API", () => {
       attentionDb.close();
     }
 
+    writeThreadEventsSeed(
+      path.join(root, "thread-events-seed.json"),
+      new Map([
+        [
+          "example/public-repo#7",
+          {
+            repo: "example/public-repo",
+            number: 7,
+            sourceUpdatedAt: "2026-10-03T18:00:00Z",
+            events: [
+              {
+                id: "event:1",
+                actor: "maintainer",
+                actorType: "User",
+                kind: "review",
+                at: "2026-10-03T18:01:00Z",
+                url: "https://github.com/example/public-repo/pull/7#pullrequestreview-1",
+                reviewState: "CHANGES_REQUESTED",
+                authorAssociation: "MEMBER",
+              },
+            ],
+          },
+        ],
+        [
+          "secret/private-repo#3",
+          {
+            repo: "secret/private-repo",
+            number: 3,
+            sourceUpdatedAt: "2026-10-03T18:00:00Z",
+            events: [
+              {
+                id: "event:private",
+                actor: "private-maintainer",
+                actorType: "User",
+                kind: "comment",
+                at: "2026-10-03T18:01:00Z",
+                url: null,
+                reviewState: null,
+                authorAssociation: null,
+              },
+            ],
+          },
+        ],
+      ]),
+      "2026-10-03T18:05:00Z",
+    );
+
     const api = writePublicApi(publicDbPath, attentionDbPath, outputRoot);
 
     assert.deepEqual(api.attention.items.map((item) => item.repo), ["example/public-repo"]);
@@ -129,6 +177,10 @@ describe("public GitHub read API", () => {
     );
     assert.equal(fs.existsSync(publicRepoFile), true);
     assert.equal(fs.existsSync(publicThreadFile), true);
+    const thread = JSON.parse(fs.readFileSync(publicThreadFile, "utf8"));
+    assert.equal(thread.events[0]?.actor, "maintainer");
+    assert.equal(thread.events[0]?.reviewState, "CHANGES_REQUESTED");
+    assert.equal(thread.eventsUpdatedAt, "2026-10-03T18:05:00Z");
     assert.equal(
       fs.existsSync(
         path.join(outputRoot, "api", "v1", "repos", "secret", "private-repo.json"),
@@ -143,6 +195,10 @@ describe("public GitHub read API", () => {
     assert.equal(deployed.includes("PRIVATE BODY"), false);
     assert.equal(deployed.includes("Private title"), false);
     assert.equal(deployed.includes("secret/private-repo"), false);
+    assert.equal(
+      fs.readFileSync(publicThreadFile, "utf8").includes("private-maintainer"),
+      false,
+    );
   });
   it("uses the tracked public-safe seed when the local attention database is absent", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-public-api-seed-"));
