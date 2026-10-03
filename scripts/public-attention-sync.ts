@@ -6,6 +6,11 @@ import {
   type AttentionActivity,
   type PullRequestSnapshot,
 } from "../lib/attention.ts";
+import {
+  publicThreadEventsFromRest,
+  writeThreadEventsSeed,
+  type PublicThreadEvents,
+} from "../lib/public-thread-events.ts";
 
 type Json = Record<string, any>;
 
@@ -15,6 +20,7 @@ const deepLimit = Math.max(
   Math.min(24, Number(process.env.PUBLIC_ATTENTION_DEEP_LIMIT ?? "24") || 24),
 );
 const outputPath = path.join(process.cwd(), "data", "attention-seed.json");
+const eventsPath = path.join(process.cwd(), "data", "thread-events-seed.json");
 const API = "https://api.github.com";
 
 async function githubJson(url: string): Promise<any> {
@@ -58,12 +64,12 @@ function activity(
   };
 }
 
-async function deepActivities(repo: string, number: number): Promise<AttentionActivity[]> {
+async function deepContext(repo: string, number: number) {
   const [comments, reviews] = await Promise.all([
     githubJson(`${API}/repos/${repo}/issues/${number}/comments?per_page=100`) as Promise<Json[]>,
     githubJson(`${API}/repos/${repo}/pulls/${number}/reviews?per_page=100`) as Promise<Json[]>,
   ]);
-  return [
+  const activities = [
     ...comments.map((item) =>
       activity(item.user, item.body, item.created_at, "comment"),
     ),
@@ -71,6 +77,10 @@ async function deepActivities(repo: string, number: number): Promise<AttentionAc
       activity(item.user, item.body, item.submitted_at, "review", item.state),
     ),
   ].filter(Boolean) as AttentionActivity[];
+  return {
+    activities,
+    events: publicThreadEventsFromRest(comments, reviews),
+  };
 }
 
 function snapshotFromSearch(
@@ -111,6 +121,7 @@ async function main() {
   );
 
   const records = [];
+  const eventThreads = new Map<string, PublicThreadEvents>();
   let deepInspected = 0;
   for (const item of items) {
     const repo = repoFromApiUrl(item.repository_url);
@@ -119,7 +130,14 @@ async function main() {
     let activities: AttentionActivity[] = [];
     if (deepKeys.has(String(item.id))) {
       try {
-        activities = await deepActivities(repo, Number(item.number));
+        const context = await deepContext(repo, Number(item.number));
+        activities = context.activities;
+        eventThreads.set(`${repo}#${item.number}`, {
+          repo,
+          number: Number(item.number),
+          sourceUpdatedAt: String(item.updated_at ?? ""),
+          events: context.events,
+        });
         deepInspected += 1;
       } catch (error) {
         console.warn(
@@ -140,15 +158,17 @@ async function main() {
     cachedOpen: sorted.length,
     deepInspected,
     deepLimit,
+    threadEventThreads: eventThreads.size,
     items: sorted,
   };
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(output, null, 2) + "\n", "utf8");
+  writeThreadEventsSeed(eventsPath, eventThreads, output.updatedAt);
   const p0 = sorted.filter((item) => item.priority === "P0").length;
   const p1 = sorted.filter((item) => item.priority === "P1").length;
   console.log(
-    `Refreshed public attention hotset: ${sorted.length} PRs, ${deepInspected} deep-inspected, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} authored open PRs.`,
+    `Refreshed public attention hotset: ${sorted.length} PRs, ${deepInspected} deep-inspected, ${eventThreads.size} thread event ledgers, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} authored open PRs.`,
   );
 }
 
