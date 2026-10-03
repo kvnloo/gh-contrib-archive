@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "privacy": "public-safe",
+  "kind": "github-materialized-read-api",
+  "generatedAt": "2026-10-03T19:25:00Z",
+  "sources": {
+    "archiveUpdatedAt": "2026-10-03T15:11:10Z",
+    "attentionUpdatedAt": "2026-10-03T19:25:00Z"
+  },
+  "endpoints": {
+    "index": "index.json",
+    "attention": "attention.json",
+    "contributions": "contributions.json",
+    "repos": "repos.json",
+    "repo": "repos/{owner}/{repo}.json",
+    "thread": "threads/{owner}/{repo}/{number}.json"
+  },
+  "guarantees": [
+    "read-only static JSON",
+    "whitelisted projected schemas only",
+    "private and unknown repository identities excluded from repo/thread/attention endpoints",
+    "no GitHub credential or raw notification/review/comment body is published"
+  ]
+}

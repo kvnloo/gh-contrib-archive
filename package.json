@@ -4,15 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 43147",
-    "prebuild": "npm run export:public",
+    "prebuild": "npm run export:public && npm run export:api",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 43147",
     "lint": "eslint",
-    "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts && npm run export:public",
+    "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts && npm run export:public && npm run export:api",
     "privacy": "tsx scripts/privacy-sync.ts",
     "export:public": "tsx scripts/export-public.ts",
+    "export:api": "tsx scripts/export-api.ts",
     "sanity": "tsx scripts/sanity-report.ts",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "inbox:sync": "tsx scripts/inbox-sync.ts",
+    "inbox:next": "tsx scripts/inbox-next.ts",
+    "inbox": "npm run inbox:sync && npm run inbox:next",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "inbox:public-sync": "tsx scripts/public-attention-sync.ts"
   },
   "dependencies": {
     "next": "16.3.5",
