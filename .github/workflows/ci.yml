@@ -29,3 +29,8 @@ jobs:
           test -f out/world-graph.json
           test -f out/data/archive.json
           test -f out/data/manifest.json
+          test -f out/api/v1/index.json
+          test -f out/api/v1/attention.json
+          test -f out/api/v1/contributions.json
+          test -f out/api/v1/repos.json
+          test -f out/api/v1/threads/pingdotgg/t3code/13967.json
