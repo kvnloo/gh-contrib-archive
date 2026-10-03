@@ -3,6 +3,8 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [nightly]
+  schedule:
+    - cron: "17 * * * *"
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -27,12 +29,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref_name }}
+          ref: ${{ inputs.ref || 'nightly' }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Refresh authored-PR attention cache
+        env:
+          GH_TOKEN: ${{ secrets.GH_INBOX_TOKEN }}
+        run: |
+          if [ -n "$GH_TOKEN" ]; then
+            npm run inbox:sync
+          else
+            echo "GH_INBOX_TOKEN is not configured; publishing archive API without live attention rows."
+          fi
       - run: npm test
       - run: npm run build
       - name: Configure GitHub Pages
