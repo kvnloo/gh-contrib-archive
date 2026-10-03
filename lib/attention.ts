@@ -48,8 +48,14 @@ export type AttentionRecord = {
   mergeState: string | null;
 };
 
-const VERIFY_RE =
-  /\b(test|tests|tested|verification|verify|evidence|screenshot|screenshots|recording|repro|reproduce|run)\b/i;
+const VERIFICATION_REQUEST_RE =
+  /(?:\b(?:please|could you|can you|need(?:s|ed)?|must|required|missing|which|useful addition)\b[\s\S]{0,180}\b(?:test|tests|verification|verify|evidence|screenshot|screenshots|recording|repro|reproduce|run|results|checks|link)\b)|(?:\b(?:test|tests|verification|verify|evidence|screenshot|screenshots|recording|repro|reproduce|run|results|checks)\b[\s\S]{0,180}\b(?:please|required|needed|missing|request|addition)\b)/i;
+const ACTION_REQUEST_RE =
+  /\b(?:please|could you|can you|needs?|needed|must|required|missing|one gap remains|useful addition|address|rebase|fix|update|which checks|which results)\b/i;
+const SUPERSEDED_RE =
+  /\b(?:supersed|competing fix|merge\s+[^.\n]{0,120}\s+in favor|covered by\s+#\d+|only one of the two should)\b/i;
+const NO_ACTION_RE =
+  /\b(?:no actionable defect|no new finding|nothing left|works as expected|everything works as expected|no issues found|clean fix with no issues)\b/i;
 const FAILING_CHECK_STATES = new Set([
   "FAILURE",
   "ERROR",
@@ -101,7 +107,14 @@ export function classifyPullRequest(
     (activity) =>
       activity.kind === "review" && activity.reviewState?.toUpperCase() === "CHANGES_REQUESTED",
   );
-  const verificationRequest = unansweredExternal.find((activity) => VERIFY_RE.test(activity.body));
+  const verificationRequest = unansweredExternal.find((activity) =>
+    VERIFICATION_REQUEST_RE.test(activity.body),
+  );
+  const actionRequest = unansweredExternal.find((activity) =>
+    ACTION_REQUEST_RE.test(activity.body),
+  );
+  const superseded = unansweredExternal.find((activity) => SUPERSEDED_RE.test(activity.body));
+  const latestExternal = unansweredExternal[0] ?? null;
   const ci = ciState(snapshot.checks);
 
   let priority: AttentionPriority = "P2";
@@ -116,10 +129,22 @@ export function classifyPullRequest(
     priority = "P0";
     blocker = "verification_requested";
     nextAction = "run the requested verification and post the observed results/evidence";
-  } else if (unansweredExternal.length > 0) {
+  } else if (actionRequest) {
     priority = "P0";
+    blocker = "external_action_requested";
+    nextAction = "address the newest unresolved human request/finding and reply with evidence";
+  } else if (superseded) {
+    priority = "P1";
+    blocker = "superseded_candidate";
+    nextAction = "confirm the competing fix landed or still covers the issue, then close/supersede this PR";
+  } else if (latestExternal && NO_ACTION_RE.test(latestExternal.body)) {
+    priority = "P2";
+    blocker = "review_update_no_action";
+    nextAction = "no immediate fix requested; wait for broader review or maintainer decision";
+  } else if (unansweredExternal.length > 0) {
+    priority = "P1";
     blocker = "external_reply";
-    nextAction = "read and respond to the newest unanswered human feedback";
+    nextAction = "inspect the newest unanswered human feedback and respond if action is required";
   } else if (ci === "failing") {
     priority = "P1";
     blocker = "ci_failed";
