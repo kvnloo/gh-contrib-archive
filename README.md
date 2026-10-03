@@ -34,7 +34,7 @@ npm run dev                  # http://127.0.0.1:43147
 GitHub Pages is a materialized read model of relevant GitHub state:
 
 ```text
-GitHub -> credentialed collector -> sanitizer/projector -> static Pages JSON -> readers
+GitHub public REST + optional notification credential -> sanitizer/projector -> static Pages JSON -> readers
 ```
 
 Initial v1 endpoints:
@@ -72,12 +72,12 @@ npm run inbox:next -- --json
 
 ## Hourly Pages refresh
 
-The Pages workflow refreshes hourly and on demand. To include live attention state, configure a **classic GitHub token with only the `notifications` scope** as the repository Actions secret `GH_INBOX_TOKEN`.
+The Pages workflow can refresh the public attention hotset **without any secret**. It queries the 100 most recently updated public open PRs authored by `kvnloo`, deep-inspects up to 24 of the hottest comment-active threads, projects only normalized blocker/next-action state, and stays within the anonymous GitHub REST hourly budget. Any new maintainer reply bumps a PR's `updated_at`, pulling it into this hotset.
 
-Do this from your own terminal; never paste the token into chat:
+A classic token with the `notifications` scope is optional enrichment. If you want notification reasons such as direct mentions/assignments included, store it as `GH_INBOX_TOKEN` from your own terminal:
 
 ```bash
 gh secret set GH_INBOX_TOKEN --repo kvnloo/gh-contrib-archive
 ```
 
-Paste the token into the secure CLI prompt. The workflow provides it to `gh` only for the collection step. It is not persisted in SQLite, repository files, artifacts, or Pages output.
+The optional secret is supplied only to the collection step. It is not persisted in SQLite, repository files, artifacts, or Pages output.
