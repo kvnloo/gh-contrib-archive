@@ -1,4 +1,5 @@
 export type AttentionPriority = "P0" | "P1" | "P2";
+export type RepositoryVisibility = "public" | "private" | "internal" | "unknown";
 
 export type AttentionActivity = {
   actor: string;
@@ -15,6 +16,7 @@ export type AttentionCheck = {
 
 export type PullRequestSnapshot = {
   repo: string;
+  repoVisibility: RepositoryVisibility;
   number: number;
   title: string;
   url: string;
@@ -31,6 +33,7 @@ export type PullRequestSnapshot = {
 
 export type AttentionRecord = {
   repo: string;
+  repoVisibility: RepositoryVisibility;
   number: number;
   title: string;
   url: string;
@@ -145,6 +148,7 @@ export function classifyPullRequest(
 
   return {
     repo: snapshot.repo,
+    repoVisibility: snapshot.repoVisibility,
     number: snapshot.number,
     title: snapshot.title,
     url: snapshot.url,
