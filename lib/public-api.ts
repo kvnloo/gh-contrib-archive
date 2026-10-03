@@ -1,0 +1,288 @@
+import fs from "node:fs";
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import {
+  openAttentionDb,
+  readAttentionRecords,
+  readAttentionSyncedAt,
+} from "./attention-db.ts";
+import type { AttentionRecord } from "./attention.ts";
+import {
+  compilePublicSnapshot,
+  type PublicArchiveItem,
+  type PublicArchive,
+} from "./public-snapshot.ts";
+
+export const PUBLIC_API_SCHEMA = 1 as const;
+
+export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility">;
+
+export type PublicApiIndex = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  kind: "github-materialized-read-api";
+  generatedAt: string;
+  sources: {
+    archiveUpdatedAt: string;
+    attentionUpdatedAt: string | null;
+  };
+  endpoints: {
+    index: string;
+    attention: string;
+    contributions: string;
+    repos: string;
+    repo: string;
+    thread: string;
+  };
+  guarantees: string[];
+};
+
+export type PublicAttention = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  updatedAt: string | null;
+  count: number;
+  items: PublicAttentionItem[];
+};
+
+export type PublicRepoIndex = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  count: number;
+  repos: {
+    repo: string;
+    contributions: number;
+    attention: number;
+    href: string;
+  }[];
+};
+
+type PublicRepoResource = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  repo: string;
+  contributions: PublicArchiveItem[];
+  attention: PublicAttentionItem[];
+};
+
+type PublicThreadResource = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  repo: string;
+  number: number;
+  contributions: PublicArchiveItem[];
+  attention: PublicAttentionItem[];
+};
+
+export type CompiledPublicApi = {
+  index: PublicApiIndex;
+  attention: PublicAttention;
+  contributions: PublicArchive;
+  repos: PublicRepoIndex;
+  repoResources: Map<string, PublicRepoResource>;
+  threadResources: Map<string, PublicThreadResource>;
+};
+
+function laterIso(a: string, b: string | null): string {
+  return b && b > a ? b : a;
+}
+
+function publicAttentionItem(record: AttentionRecord): PublicAttentionItem {
+  const { repoVisibility: _repoVisibility, ...safe } = record;
+  return safe;
+}
+
+function safeRepoSegments(repo: string): [string, string] | null {
+  const match = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(repo);
+  if (!match || match[1] === "." || match[1] === ".." || match[2] === "." || match[2] === "..") {
+    return null;
+  }
+  return [match[1], match[2]];
+}
+
+function readPublicAttention(attentionDbPath: string): {
+  updatedAt: string | null;
+  records: AttentionRecord[];
+} {
+  if (!fs.existsSync(attentionDbPath)) return { updatedAt: null, records: [] };
+  let db: DatabaseSync | null = null;
+  try {
+    db = openAttentionDb(attentionDbPath);
+    return {
+      updatedAt: readAttentionSyncedAt(db),
+      records: readAttentionRecords(db, 10000).filter(
+        (record) => record.repoVisibility === "public" && safeRepoSegments(record.repo) !== null,
+      ),
+    };
+  } finally {
+    db?.close();
+  }
+}
+
+export function compilePublicApi(
+  publicDbPath: string,
+  attentionDbPath: string,
+): CompiledPublicApi {
+  const snapshot = compilePublicSnapshot(publicDbPath);
+  const attentionState = readPublicAttention(attentionDbPath);
+  const attentionItems = attentionState.records.map(publicAttentionItem);
+
+  const publicItems = snapshot.archive.items.filter(
+    (item): item is Extract<PublicArchiveItem, { visibility: "public" }> =>
+      item.visibility === "public",
+  );
+
+  const itemsByRepo = new Map<string, PublicArchiveItem[]>();
+  for (const item of publicItems) {
+    if (!item.repo || safeRepoSegments(item.repo) === null) continue;
+    const list = itemsByRepo.get(item.repo) ?? [];
+    list.push(item);
+    itemsByRepo.set(item.repo, list);
+  }
+
+  const attentionByRepo = new Map<string, PublicAttentionItem[]>();
+  for (const item of attentionItems) {
+    const list = attentionByRepo.get(item.repo) ?? [];
+    list.push(item);
+    attentionByRepo.set(item.repo, list);
+  }
+
+  const repoNames = new Set<string>([
+    ...itemsByRepo.keys(),
+    ...attentionByRepo.keys(),
+  ]);
+
+  const repoResources = new Map<string, PublicRepoResource>();
+  const threadResources = new Map<string, PublicThreadResource>();
+  const repoRows: PublicRepoIndex["repos"] = [];
+
+  for (const repo of [...repoNames].sort()) {
+    const contributions = itemsByRepo.get(repo) ?? [];
+    const attention = attentionByRepo.get(repo) ?? [];
+    repoResources.set(repo, {
+      schemaVersion: PUBLIC_API_SCHEMA,
+      privacy: "public-safe",
+      repo,
+      contributions,
+      attention,
+    });
+
+    const [owner, name] = safeRepoSegments(repo)!;
+    repoRows.push({
+      repo,
+      contributions: contributions.length,
+      attention: attention.length,
+      href: `repos/${owner}/${name}.json`,
+    });
+
+    const numbers = new Set<number>();
+    for (const item of contributions) {
+      if (item.visibility === "public" && item.number != null) numbers.add(item.number);
+    }
+    for (const item of attention) numbers.add(item.number);
+
+    for (const number of [...numbers].sort((a, b) => a - b)) {
+      threadResources.set(`${repo}#${number}`, {
+        schemaVersion: PUBLIC_API_SCHEMA,
+        privacy: "public-safe",
+        repo,
+        number,
+        contributions: contributions.filter(
+          (item) => item.visibility === "public" && item.number === number,
+        ),
+        attention: attention.filter((item) => item.number === number),
+      });
+    }
+  }
+
+  const attention: PublicAttention = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe",
+    updatedAt: attentionState.updatedAt,
+    count: attentionItems.length,
+    items: attentionItems,
+  };
+
+  const repos: PublicRepoIndex = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe",
+    count: repoRows.length,
+    repos: repoRows,
+  };
+
+  const index: PublicApiIndex = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe",
+    kind: "github-materialized-read-api",
+    generatedAt: laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt),
+    sources: {
+      archiveUpdatedAt: snapshot.manifest.lastCheckedAt,
+      attentionUpdatedAt: attentionState.updatedAt,
+    },
+    endpoints: {
+      index: "index.json",
+      attention: "attention.json",
+      contributions: "contributions.json",
+      repos: "repos.json",
+      repo: "repos/{owner}/{repo}.json",
+      thread: "threads/{owner}/{repo}/{number}.json",
+    },
+    guarantees: [
+      "read-only static JSON",
+      "whitelisted projected schemas only",
+      "private and unknown repository identities excluded from repo/thread/attention endpoints",
+      "no GitHub credential or raw notification/review/comment body is published",
+    ],
+  };
+
+  return {
+    index,
+    attention,
+    contributions: snapshot.archive,
+    repos,
+    repoResources,
+    threadResources,
+  };
+}
+
+export function writePublicApi(
+  publicDbPath: string,
+  attentionDbPath: string,
+  outputRoot: string,
+) {
+  const compiled = compilePublicApi(publicDbPath, attentionDbPath);
+  const root = path.join(outputRoot, "api", "v1");
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(root, { recursive: true });
+
+  const writeJson = (file: string, value: unknown) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(value, null, 2) + "\n", "utf8");
+  };
+
+  writeJson(path.join(root, "index.json"), compiled.index);
+  writeJson(path.join(root, "attention.json"), compiled.attention);
+  writeJson(path.join(root, "contributions.json"), compiled.contributions);
+  writeJson(path.join(root, "repos.json"), compiled.repos);
+
+  for (const [repo, resource] of compiled.repoResources) {
+    const segments = safeRepoSegments(repo);
+    if (!segments) continue;
+    const [owner, name] = segments;
+    writeJson(path.join(root, "repos", owner, `${name}.json`), resource);
+  }
+
+  for (const [key, resource] of compiled.threadResources) {
+    const separator = key.lastIndexOf("#");
+    const repo = key.slice(0, separator);
+    const segments = safeRepoSegments(repo);
+    if (!segments) continue;
+    const [owner, name] = segments;
+    writeJson(
+      path.join(root, "threads", owner, name, `${resource.number}.json`),
+      resource,
+    );
+  }
+
+  return compiled;
+}
