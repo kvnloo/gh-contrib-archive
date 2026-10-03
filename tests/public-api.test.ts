@@ -154,6 +154,69 @@ describe("public GitHub read API", () => {
       "2026-10-03T18:05:00Z",
     );
 
+    fs.writeFileSync(
+      path.join(root, "semantic-graph.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        privacy: "public-safe",
+        source: "gitnexus",
+        gitnexusVersion: "1.6.12",
+        embeddings: false,
+        revision: "fixture",
+        hotset: [
+          {
+            repo: "example/public-repo",
+            alias: "example__public-repo",
+            sha: "abc",
+            lastActivityAt: "2026-10-03T18:00:00Z",
+            activityCount: 1,
+            status: "indexed",
+          },
+          {
+            repo: "secret/private-repo",
+            alias: "secret__private-repo",
+            sha: "def",
+            lastActivityAt: "2026-10-03T18:00:00Z",
+            activityCount: 1,
+            status: "indexed",
+          },
+        ],
+        concepts: [
+          {
+            id: "performance",
+            query: "cache concurrency",
+            repos: [
+              {
+                repo: "example/public-repo",
+                processCount: 1,
+                definitionCount: 0,
+                symbolCount: 1,
+                topProcesses: ["CacheFlow"],
+                topFiles: ["src/cache.ts"],
+              },
+              {
+                repo: "secret/private-repo",
+                processCount: 1,
+                definitionCount: 0,
+                symbolCount: 1,
+                topProcesses: ["SecretFlow"],
+                topFiles: ["secret.ts"],
+              },
+            ],
+          },
+        ],
+        repoLinks: [
+          {
+            source: "example/public-repo",
+            target: "secret/private-repo",
+            sharedConcepts: ["performance"],
+            weight: 1,
+          },
+        ],
+      }),
+      "utf8",
+    );
+
     const api = writePublicApi(publicDbPath, attentionDbPath, outputRoot);
 
     assert.deepEqual(api.attention.items.map((item) => item.repo), ["example/public-repo"]);
@@ -162,6 +225,8 @@ describe("public GitHub read API", () => {
     assert.deepEqual(api.recent.items.map((item) => item.repo), ["example/public-repo"]);
     assert.equal(api.recent.items[0]?.href, "threads/example/public-repo/7.json");
     assert.deepEqual(api.actors.actors.map((actor) => actor.login), ["maintainer"]);
+    assert.deepEqual(api.semantic.hotset.map((item) => item.repo), ["example/public-repo"]);
+    assert.equal(JSON.stringify(api.semantic).includes("secret/private-repo"), false);
 
     const publicRepoFile = path.join(
       outputRoot,
@@ -205,6 +270,11 @@ describe("public GitHub read API", () => {
       "utf8",
     );
     assert.equal(recent.includes("secret/private-repo"), false);
+    const semantic = fs.readFileSync(
+      path.join(outputRoot, "api", "v1", "semantic.json"),
+      "utf8",
+    );
+    assert.equal(semantic.includes("secret/private-repo"), false);
     assert.equal(
       fs.readFileSync(publicThreadFile, "utf8").includes("private-maintainer"),
       false,
