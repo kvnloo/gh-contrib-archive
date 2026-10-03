@@ -21,6 +21,9 @@ export function openAttentionDb(dbPath = ATTENTION_DB_PATH) {
       next_action TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       last_external_at TEXT,
+      latest_external_actor TEXT,
+      latest_external_kind TEXT,
+      latest_external_review_state TEXT,
       last_self_at TEXT,
       ci_state TEXT NOT NULL,
       review_decision TEXT,
@@ -39,6 +42,15 @@ export function openAttentionDb(dbPath = ATTENTION_DB_PATH) {
       "ALTER TABLE attention_prs ADD COLUMN repo_visibility TEXT NOT NULL DEFAULT 'unknown'",
     );
   }
+  for (const column of [
+    "latest_external_actor",
+    "latest_external_kind",
+    "latest_external_review_state",
+  ]) {
+    if (!columns.some((existing) => existing.name === column)) {
+      db.exec(`ALTER TABLE attention_prs ADD COLUMN ${column} TEXT`);
+    }
+  }
   return db;
 }
 
@@ -50,8 +62,9 @@ export function replaceAttentionRecords(
   const insert = db.prepare(`
     INSERT INTO attention_prs (
       repo, repo_visibility, number, title, url, priority, blocker, next_action, updated_at,
-      last_external_at, last_self_at, ci_state, review_decision, merge_state
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      last_external_at, latest_external_actor, latest_external_kind, latest_external_review_state,
+      last_self_at, ci_state, review_decision, merge_state
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   db.exec("BEGIN");
   try {
@@ -68,6 +81,9 @@ export function replaceAttentionRecords(
         record.nextAction,
         record.updatedAt,
         record.lastExternalAt,
+        record.latestExternalActor,
+        record.latestExternalKind,
+        record.latestExternalReviewState,
         record.lastSelfAt,
         record.ciState,
         record.reviewDecision,
@@ -87,7 +103,8 @@ export function replaceAttentionRecords(
 export function readAttentionRecords(db: DatabaseSync, limit = 20): AttentionRecord[] {
   const rows = db.prepare(`
     SELECT repo, repo_visibility, number, title, url, priority, blocker, next_action, updated_at,
-           last_external_at, last_self_at, ci_state, review_decision, merge_state
+           last_external_at, latest_external_actor, latest_external_kind, latest_external_review_state,
+           last_self_at, ci_state, review_decision, merge_state
     FROM attention_prs
     ORDER BY CASE priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 ELSE 2 END, updated_at DESC
     LIMIT ?
@@ -104,6 +121,16 @@ export function readAttentionRecords(db: DatabaseSync, limit = 20): AttentionRec
     nextAction: String(row.next_action),
     updatedAt: String(row.updated_at),
     lastExternalAt: row.last_external_at === null ? null : String(row.last_external_at),
+    latestExternalActor:
+      row.latest_external_actor == null ? null : String(row.latest_external_actor),
+    latestExternalKind:
+      row.latest_external_kind == null
+        ? null
+        : (String(row.latest_external_kind) as AttentionRecord["latestExternalKind"]),
+    latestExternalReviewState:
+      row.latest_external_review_state == null
+        ? null
+        : String(row.latest_external_review_state),
     lastSelfAt: row.last_self_at === null ? null : String(row.last_self_at),
     ciState: String(row.ci_state) as AttentionRecord["ciState"],
     reviewDecision: row.review_decision === null ? null : String(row.review_decision),
