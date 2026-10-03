@@ -12,6 +12,9 @@
     "privacy": "tsx scripts/privacy-sync.ts",
     "export:public": "tsx scripts/export-public.ts",
     "sanity": "tsx scripts/sanity-report.ts",
+    "inbox:sync": "tsx scripts/inbox-sync.ts",
+    "inbox:next": "tsx scripts/inbox-next.ts",
+    "inbox": "npm run inbox:sync && npm run inbox:next",
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {

@@ -37,8 +37,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# local full archive (private titles/excerpts) — never commit
+# local full archive + attention queue — never commit
 data/github.db
+data/attention.db
 data/*.db-wal
 data/*.db-shm
 data/*.db-journal
