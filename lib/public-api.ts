@@ -100,19 +100,61 @@ function safeRepoSegments(repo: string): [string, string] | null {
   return [match[1], match[2]];
 }
 
+function readAttentionSeed(attentionDbPath: string): {
+  updatedAt: string | null;
+  records: AttentionRecord[];
+} {
+  const seedPath = path.join(path.dirname(attentionDbPath), "attention-seed.json");
+  if (!fs.existsSync(seedPath)) return { updatedAt: null, records: [] };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(seedPath, "utf8")) as {
+      updatedAt?: unknown;
+      items?: unknown;
+    };
+    const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
+    const records = rawItems.filter((item): item is AttentionRecord => {
+      if (!item || typeof item !== "object") return false;
+      const row = item as Record<string, unknown>;
+      return (
+        row.repoVisibility === "public" &&
+        typeof row.repo === "string" &&
+        safeRepoSegments(row.repo) !== null &&
+        typeof row.number === "number" &&
+        typeof row.title === "string" &&
+        typeof row.url === "string" &&
+        typeof row.priority === "string" &&
+        typeof row.blocker === "string" &&
+        typeof row.nextAction === "string" &&
+        typeof row.updatedAt === "string"
+      );
+    });
+    return {
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
+      records,
+    };
+  } catch {
+    return { updatedAt: null, records: [] };
+  }
+}
+
 function readPublicAttention(attentionDbPath: string): {
   updatedAt: string | null;
   records: AttentionRecord[];
 } {
-  if (!fs.existsSync(attentionDbPath)) return { updatedAt: null, records: [] };
+  if (!fs.existsSync(attentionDbPath)) return readAttentionSeed(attentionDbPath);
   let db: DatabaseSync | null = null;
   try {
     db = openAttentionDb(attentionDbPath);
+    const records = readAttentionRecords(db, 10000).filter(
+      (record) => record.repoVisibility === "public" && safeRepoSegments(record.repo) !== null,
+    );
+    if (records.length === 0) {
+      const seed = readAttentionSeed(attentionDbPath);
+      if (seed.records.length > 0) return seed;
+    }
     return {
       updatedAt: readAttentionSyncedAt(db),
-      records: readAttentionRecords(db, 10000).filter(
-        (record) => record.repoVisibility === "public" && safeRepoSegments(record.repo) !== null,
-      ),
+      records,
     };
   } finally {
     db?.close();
