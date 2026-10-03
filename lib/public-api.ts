@@ -18,6 +18,12 @@ import {
 } from "./public-thread-events.ts";
 import { buildWorkQueues, type WorkQueueName } from "./work-queues.ts";
 import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
+import {
+  actorHref,
+  buildActorIndex,
+  type PublicActorIndexRow,
+  type PublicActorResource,
+} from "./actor-index.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
@@ -36,6 +42,8 @@ export type PublicApiIndex = {
     index: string;
     queues: string;
     recent: string;
+    actors: string;
+    actor: string;
     attention: string;
     contributions: string;
     repos: string;
@@ -67,6 +75,13 @@ export type PublicRecentThreads = {
   generatedAt: string;
   count: number;
   items: RecentThread[];
+};
+
+export type PublicActors = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  count: number;
+  actors: PublicActorIndexRow[];
 };
 
 export type PublicRepoIndex = {
@@ -105,11 +120,13 @@ export type CompiledPublicApi = {
   index: PublicApiIndex;
   queues: PublicWorkQueues;
   recent: PublicRecentThreads;
+  actors: PublicActors;
   attention: PublicAttention;
   contributions: PublicArchive;
   repos: PublicRepoIndex;
   repoResources: Map<string, PublicRepoResource>;
   threadResources: Map<string, PublicThreadResource>;
+  actorResources: Map<string, PublicActorResource>;
 };
 
 function laterIso(a: string, b: string | null): string {
@@ -273,6 +290,20 @@ export function compilePublicApi(
     }
   }
 
+  const actorState = buildActorIndex(
+    [...threadResources.values()].map((thread) => ({
+      repo: thread.repo,
+      number: thread.number,
+      events: thread.events,
+    })),
+  );
+  const actors: PublicActors = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe",
+    count: actorState.rows.length,
+    actors: actorState.rows,
+  };
+
   const groupedQueues = buildWorkQueues(attentionItems);
   const queues: PublicWorkQueues = {
     schemaVersion: PUBLIC_API_SCHEMA,
@@ -321,6 +352,8 @@ export function compilePublicApi(
       index: "index.json",
       queues: "queues.json",
       recent: "recent.json",
+      actors: "actors.json",
+      actor: "actors/{login}.json",
       attention: "attention.json",
       contributions: "contributions.json",
       repos: "repos.json",
@@ -339,11 +372,13 @@ export function compilePublicApi(
     index,
     queues,
     recent,
+    actors,
     attention,
     contributions: snapshot.archive,
     repos,
     repoResources,
     threadResources,
+    actorResources: actorState.resources,
   };
 }
 
@@ -365,9 +400,14 @@ export function writePublicApi(
   writeJson(path.join(root, "index.json"), compiled.index);
   writeJson(path.join(root, "queues.json"), compiled.queues);
   writeJson(path.join(root, "recent.json"), compiled.recent);
+  writeJson(path.join(root, "actors.json"), compiled.actors);
   writeJson(path.join(root, "attention.json"), compiled.attention);
   writeJson(path.join(root, "contributions.json"), compiled.contributions);
   writeJson(path.join(root, "repos.json"), compiled.repos);
+
+  for (const [login, resource] of compiled.actorResources) {
+    writeJson(path.join(root, actorHref(login)), resource);
+  }
 
   for (const [repo, resource] of compiled.repoResources) {
     const segments = safeRepoSegments(repo);
