@@ -60,14 +60,21 @@ jobs:
           if (index.coverage?.source !== "covered-public-inventory") throw new Error("covered collector not authoritative");
           if (index.coverage?.inventoryComplete !== true) throw new Error("inventory is incomplete; refusing publication");
           if (attention.coverage?.inventoryComplete !== true) throw new Error("attention coverage is incomplete");
-          const gev = `${root}/repos/bilawalsidhu/gods-eye-view.json`;
-          if (!fs.existsSync(gev)) throw new Error("GEV is missing from covered repository materialization");
-          const repo = JSON.parse(fs.readFileSync(gev, "utf8"));
-          if (!Array.isArray(repo.attention) || repo.attention.length < 1) throw new Error("GEV inbox has no current work rows");
+          if (!Array.isArray(attention.items) || attention.count !== attention.items.length) throw new Error("attention count mismatch");
+          const repos = Array.isArray(index.coverage?.activeRepos) ? index.coverage.activeRepos : [];
+          if (new Set(repos).size !== repos.length) throw new Error("duplicate active repository");
+          for (const repo of repos) {
+            const parts = repo.split("/");
+            if (parts.length !== 2 || parts.some((part) => !/^[A-Za-z0-9_.-]+$/.test(part))) throw new Error("unsafe active repository");
+            const file = `${root}/repos/${parts[0]}/${parts[1]}.json`;
+            if (!fs.existsSync(file)) throw new Error(`missing repository materialization for ${repo}`);
+            const resource = JSON.parse(fs.readFileSync(file, "utf8"));
+            if (resource.repo !== repo || resource.privacy !== "public-safe") throw new Error(`invalid repository materialization for ${repo}`);
+          }
           console.log(JSON.stringify({
-            coveredRepos: index.coverage.activeRepos?.length ?? null,
+            activeRepos: repos.length,
             attentionRows: attention.count,
-            gevRows: repo.attention.length,
+            feedbackComplete: index.coverage?.feedbackComplete ?? null,
           }));
           NODE
       - id: dogfood
@@ -122,22 +129,36 @@ jobs:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           python3 - <<'PY'
-          import json, os, time, urllib.request
+          import json, os, time, urllib.parse, urllib.request
           base = os.environ["PAGE_URL"].rstrip("/")
           error = None
           for _ in range(12):
               try:
                   with urllib.request.urlopen(base + "/api/v1/index.json", timeout=10) as r:
                       index = json.load(r)
-                  with urllib.request.urlopen(base + "/api/v1/repos/bilawalsidhu/gods-eye-view.json", timeout=10) as r:
-                      gev = json.load(r)
+                  with urllib.request.urlopen(base + "/api/v1/attention.json", timeout=10) as r:
+                      attention = json.load(r)
                   if index.get("coverage", {}).get("source") != "covered-public-inventory":
                       raise RuntimeError("deployed index is not the covered collector")
                   if index.get("coverage", {}).get("inventoryComplete") is not True:
                       raise RuntimeError("deployed inventory is incomplete")
-                  if not gev.get("attention"):
-                      raise RuntimeError("deployed GEV inbox is empty")
-                  print(json.dumps({"revision": index.get("revision"), "gevRows": len(gev["attention"])}))
+                  if attention.get("coverage", {}).get("inventoryComplete") is not True:
+                      raise RuntimeError("deployed attention coverage is incomplete")
+                  if attention.get("count") != len(attention.get("items", [])):
+                      raise RuntimeError("deployed attention count mismatch")
+                  repos = index.get("coverage", {}).get("activeRepos") or []
+                  if repos:
+                      owner, name = repos[0].split("/", 1)
+                      path = "/api/v1/repos/" + urllib.parse.quote(owner, safe="") + "/" + urllib.parse.quote(name, safe="") + ".json"
+                      with urllib.request.urlopen(base + path, timeout=10) as r:
+                          resource = json.load(r)
+                      if resource.get("repo") != repos[0] or resource.get("privacy") != "public-safe":
+                          raise RuntimeError("deployed repository materialization mismatch")
+                  print(json.dumps({
+                      "revision": index.get("revision"),
+                      "activeRepos": len(repos),
+                      "attentionRows": attention.get("count"),
+                  }))
                   break
               except Exception as exc:
                   error = exc
