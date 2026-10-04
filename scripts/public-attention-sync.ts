@@ -134,7 +134,7 @@ function snapshotFromSearch(
 
 async function main() {
   const cache = readAttentionCache(cachePath);
-  const query = encodeURIComponent(`is:pr is:open author:${login}`);
+  const query = encodeURIComponent(`is:pr is:open involves:${login}`);
   const search = (await githubJson(
     `${API}/search/issues?q=${query}&sort=updated&order=desc&per_page=100&page=1`,
   )) as Json;
@@ -231,13 +231,16 @@ async function main() {
   const cacheHits = inspected.filter((item) => item.reused).length;
   const cacheMisses = inspected.length - cacheHits;
   const sorted = sortAttention(records);
+  const totalOpenReportedBySearch = Number(search.total_count ?? sorted.length);
   const output = {
     schemaVersion: 1,
     privacy: "public-safe",
     source: "github-public-rest-hotset",
+    collectionScope: "open-prs-involving-login",
+    coverageComplete: totalOpenReportedBySearch <= candidates.length,
     classifierVersion: PUBLIC_ATTENTION_CLASSIFIER_VERSION,
     updatedAt: now,
-    totalOpenReportedBySearch: Number(search.total_count ?? sorted.length),
+    totalOpenReportedBySearch,
     cachedOpen: sorted.length,
     cacheHits,
     cacheMisses,
@@ -254,7 +257,7 @@ async function main() {
   const p0 = sorted.filter((item) => item.priority === "P0").length;
   const p1 = sorted.filter((item) => item.priority === "P1").length;
   console.log(
-    `Refreshed public attention hotset: ${sorted.length} PRs, ${cacheHits} reused, ${deepInspected} deep-inspected, ${requestCount} GitHub requests at concurrency ${concurrency}, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} authored open PRs.`,
+    `Refreshed public attention hotset: ${sorted.length} PRs, ${cacheHits} reused, ${deepInspected} deep-inspected, ${requestCount} GitHub requests at concurrency ${concurrency}, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} open PRs involving the configured login; coverage ${output.coverageComplete ? "complete" : "partial"}.`,
   );
 }
 

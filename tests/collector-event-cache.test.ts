@@ -21,7 +21,7 @@ const prs = [1, 2].map(number => ({
 }));
 globalThis.fetch = async url => {
   requests.push(String(url));
-  if (String(url).includes("/search/issues?")) return Response.json({ total_count: 2, items: prs });
+  if (String(url).includes("/search/issues?")) return Response.json({ total_count: Number(process.env.MOCK_TOTAL ?? prs.length), items: prs });
   if (String(url).includes("/comments?")) {
     const number = Number(String(url).match(/issues\\/(\\d+)/)[1]);
     return Response.json([{ id: number, user: { login: "example-reviewer" },
@@ -41,11 +41,12 @@ describe("collector event/cache integration", () => {
     try {
       const mockFile = path.join(root, "mock.mjs");
       fs.writeFileSync(mockFile, mock);
-      const run = () => {
+      const run = (mockTotal?: number) => {
         const result = spawnSync(process.execPath, ["--experimental-strip-types", "--import", mockFile, collector], {
           cwd: root, encoding: "utf8", timeout: 15000,
           env: { ...process.env, GITHUB_PUBLIC_LOGIN: "example-author", PUBLIC_ATTENTION_CONCURRENCY: "2",
-            PUBLIC_ATTENTION_DEEP_LIMIT: "2", PUBLIC_ATTENTION_CACHE: path.join(root, "cache.json") },
+            PUBLIC_ATTENTION_DEEP_LIMIT: "2", PUBLIC_ATTENTION_CACHE: path.join(root, "cache.json"),
+            ...(mockTotal == null ? {} : { MOCK_TOTAL: String(mockTotal) }) },
         });
         assert.equal(result.status, 0, result.stderr);
         const output = fs.readFileSync(path.join(root, "data", "attention-seed.json"), "utf8");
@@ -55,6 +56,9 @@ describe("collector event/cache integration", () => {
         return { seed: JSON.parse(output), requests: JSON.parse(fs.readFileSync(path.join(root, "requests.json"), "utf8")) };
       };
       const cold = run();
+      assert.match(decodeURIComponent(cold.requests[0]), /involves:example-author/);
+      assert.equal(cold.seed.collectionScope, "open-prs-involving-login");
+      assert.equal(cold.seed.coverageComplete, true);
       assert.equal(cold.requests.length, 5);
       assert.equal(cold.seed.requestCount, 5);
       assert.equal(cold.seed.threads?.length, 2, "cold inspection must emit both public thread snapshots");
@@ -65,6 +69,9 @@ describe("collector event/cache integration", () => {
       assert.equal(warm.seed.cacheHits, 2);
       assert.deepEqual(warm.seed.items, cold.seed.items);
       assert.deepEqual(warm.seed.threads, cold.seed.threads, "warm reuse must not erase event context");
+      const partial = run(5);
+      assert.equal(partial.seed.coverageComplete, false, "search truncation must be explicit");
+      assert.equal(partial.seed.totalOpenReportedBySearch, 5);
 
       // Old classifier-only caches cannot satisfy the event-context contract.
       const legacy = JSON.parse(fs.readFileSync(path.join(root, "cache.json"), "utf8"));
