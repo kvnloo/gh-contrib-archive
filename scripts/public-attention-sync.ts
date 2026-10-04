@@ -362,4 +362,56 @@ function sanitizeCache(entry, root) {
     priority: r.priority, blocker: r.blocker.slice(0, 96), nextAction: r.nextAction.slice(0, 768), updatedAt: root.updatedAt,
     lastExternalAt: timestamp(r.lastExternalAt), latestExternalActor: typeof r.latestExternalActor === 'string' ? r.latestExternalActor.slice(0, 64) : null,
     latestExternalKind: ['comment', 'review'].includes(r.latestExternalKind) ? r.latestExternalKind : null,
-    latestExternalReviewState: ['APPROVED', 'CHANG
+    latestExternalReviewState: ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED', 'DISMISSED'].includes(r.latestExternalReviewState) ? r.latestExternalReviewState : null,
+    lastSelfAt: timestamp(r.lastSelfAt), threadState: root.state, threadKind: root.kind, ciState: 'none', reviewDecision: root.reviewDecision, mergeState: root.mergeState };
+  return { sourceUpdatedAt: root.updatedAt, inspectedAt: entry.inspectedAt, complete: true, reason: null, record, events, eventCount: entry.eventCount };
+}
+
+const cacheFile = path.resolve('.cache/covered-attention.json');
+const seedFile = path.resolve('data/attention-seed.json');
+const coverageFile = path.resolve('data/coverage-seed.json');
+const VERSION = 1;
+const classifierRevision = createHash('sha256').update(fs.readFileSync('lib/attention.ts')).update(fs.readFileSync('scripts/public-attention-sync.ts')).digest('hex');
+const parse = (file: string, fallback: any) => { try { if (fs.statSync(file).size > 32 * 1024 * 1024) return fallback; return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
+const write = (file: string, value: unknown) => {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify(value) + '\n', { mode: 0o600 });
+  fs.renameSync(temporary, file);
+};
+async function main() {
+  const now = Date.now();
+  const policy = parse('data/active-repos.json', { recentDays: 60, pins: ['bilawalsidhu/gods-eye-view'] });
+  const login = process.env.GITHUB_PUBLIC_LOGIN?.trim() || 'kvnloo';
+  const token = process.env.GITHUB_TOKEN || '';
+  const reader = new GithubReader({ token, ...(process.env.PUBLIC_READ_REQUEST_LIMIT ? { requestLimit: Number(process.env.PUBLIC_READ_REQUEST_LIMIT) } : {}) });
+  const existing = parse(cacheFile, {});
+  const cache = existing.version === VERSION && existing.classifierRevision === classifierRevision && existing.login === login && existing.items && typeof existing.items === 'object' ? existing.items : {};
+  const configuredPins = Array.isArray(policy.pins) ? policy.pins : [];
+  const pins = [...new Set([...configuredPins, 'bilawalsidhu/gods-eye-view'])];
+  const work = await discoverWork(reader, { login, now, recentDays: policy.recentDays, pins });
+  const deepLimit = Number(process.env.PUBLIC_ATTENTION_DEEP_LIMIT ?? 48);
+  if (!Number.isInteger(deepLimit) || deepLimit < 0 || deepLimit > 100) throw new RangeError('invalid deep limit');
+  const result = await materializeAttention(reader, work, { classify: classifyPullRequest, sort: sortAttention, login, now, cache,
+    deepLimit });
+  const observedAt = new Date().toISOString();
+  const coverage = { schemaVersion: 1, privacy: 'public-safe', observedAt, ...work.coverage, repositories: work.repositories, threads: result.coverage,
+    feedbackComplete: result.coverage.every(row => row.feedbackComplete), checksComplete: false, requests: reader.requests, requestLimit: reader.requestLimit,
+    refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted };
+  const seed = { schemaVersion: 1, privacy: 'public-safe', source: 'covered-public-inventory', updatedAt: observedAt,
+    // A successful attempt time is not a source activity time or proof of full coverage.
+    coverage, items: result.items, threads: result.threads };
+  write(cacheFile, { version: VERSION, classifierRevision, login, savedAt: observedAt, items: result.cache });
+  write(seedFile, seed); write(coverageFile, coverage);
+  console.log(JSON.stringify({ inventoryComplete: coverage.complete, feedbackComplete: coverage.feedbackComplete,
+    repositories: work.repositories.length, threads: result.items.length, requests: reader.requests, refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted }));
+}
+main().catch(() => {
+  // Never print provider errors, tokens, private names, or retain a fresh-looking fallback.
+  const observedAt = new Date().toISOString();
+  const coverage = { schemaVersion: 1, privacy: 'public-safe', observedAt, complete: false, feedbackComplete: false, checksComplete: false,
+    reason: 'collection_failed', repositories: [], threads: [] };
+  write(seedFile, { schemaVersion: 1, privacy: 'public-safe', updatedAt: observedAt, coverage, items: [], threads: [] });
+  write(coverageFile, coverage);
+  console.error('Public collection failed; emitted explicitly incomplete, empty safe projection.');
+});
