@@ -15,7 +15,11 @@ describe("Pages deployment from main", () => {
     assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*github\.sha\s*\}\}/);
     assert.match(deploy, /permissions:[\s\S]*contents:\s*write/);
     assert.match(deploy, /Restore bounded covered-inbox cache/);
+    assert.match(deploy, /\.cache\/covered-attention\.json/);
+    assert.match(deploy, /Refresh complete public work inventory/);
     assert.match(deploy, /npm run inbox:public-sync/);
+    assert.match(deploy, /GH_INBOX_TOKEN/);
+    assert.doesNotMatch(deploy, /npm run inbox:sync/);
     assert.match(deploy, /inventoryComplete/);
     assert.match(deploy, /missing repository materialization/);
     assert.match(deploy, /run: npm test/);
@@ -23,11 +27,14 @@ describe("Pages deployment from main", () => {
     assert.match(deploy, /run: npm run dogfood:api/);
     assert.match(deploy, /npm run eval:api -- --require-export/);
     assert.match(deploy, /Publish connector-readable API snapshot[\s\S]*READ_CACHE_BRANCH:\s*read-cache[\s\S]*bash scripts\/publish-read-cache\.sh/);
+    assert.match(deploy, /public\/release\.json/);
     assert.match(deploy, /api\/v1\/attention\.json/);
     assert.match(deploy, /actions\/configure-pages@v5/);
     assert.match(deploy, /actions\/upload-pages-artifact@v4/);
+    assert.match(deploy, /path:\s*\.\/out/);
     assert.match(deploy, /environment:[\s\S]*name:\s*github-pages/);
     assert.match(deploy, /actions\/deploy-pages@v4/);
+    assert.match(deploy, /Verify deployed covered inbox/);
     assert.doesNotMatch(deploy, /archive-pages/);
     assert.doesNotMatch(deploy, /gods-eye-view|bilawalsidhu/);
   });
