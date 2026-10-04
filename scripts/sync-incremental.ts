@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { PUBLIC_DB_PATH, openDb } from "../lib/db.ts";
 import { nextDay, pageIsOlderThan, searchDay, splitDay, watermarkFrom } from "../lib/incremental.ts";
-import { replaceCommitYearIfChanged, upsertContribution, type IncrementalItem as Item } from "../lib/incremental-storage.ts";
+import { replaceCommitYearIfChanged, upsertContribution } from "../lib/incremental-storage.ts";
 
 const LOGIN = process.env.GH_LOGIN ?? "kvnloo";
 const TOKEN = process.env.GH_ARCHIVE_TOKEN ?? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
@@ -15,6 +15,10 @@ if (!TOKEN) {
 type Gql = { data?: Record<string, unknown>; errors?: { message: string }[] };
 
 type Repo = { nameWithOwner: string; isPrivate?: boolean | null } | null;
+
+function isPrivateRepo(repo: Repo) {
+  return !repo || repo.isPrivate !== false;
+}
 
 async function graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch("https://api.github.com/graphql", {
