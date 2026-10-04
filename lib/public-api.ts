@@ -12,7 +12,7 @@ import {
   type PublicArchiveItem,
   type PublicArchive,
 } from "./public-snapshot.ts";
-import { contentRevision, prettyJsonBytes } from "./resource-revision.ts";
+import { contentRevision } from "./resource-revision.ts";
 import { readThreadEventsSeed, projectPublicThreadEvents, type PublicThreadEvent } from "./public-thread-events.ts";
 import { buildWorkQueues, type WorkQueueName } from "./work-queues.ts";
 import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
@@ -378,7 +378,7 @@ function resourceDescriptor(
     href,
     revision: resource.revision,
     updatedAt,
-    bytes: prettyJsonBytes(resource),
+    bytes: Buffer.byteLength(JSON.stringify(resource) + "\n"),
   };
 }
 
@@ -586,7 +586,7 @@ export function compilePublicApi(
       href: `repos/${owner}/${name}.json`,
       revision: repoResource.revision,
       updatedAt,
-      bytes: prettyJsonBytes(repoResource),
+      bytes: Buffer.byteLength(JSON.stringify(repoResource) + "\n"),
     });
   }
 
@@ -598,7 +598,7 @@ export function compilePublicApi(
   }
   const actorRows = actorState.rows.map((row) => {
     const resource = actorResources.get(row.login)!;
-    return { ...row, revision: resource.revision, bytes: prettyJsonBytes(resource) };
+    return { ...row, revision: resource.revision, bytes: Buffer.byteLength(JSON.stringify(resource) + "\n") };
   });
   const actorsBase = {
     schemaVersion: PUBLIC_API_SCHEMA,
