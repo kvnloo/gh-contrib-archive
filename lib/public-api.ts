@@ -19,6 +19,8 @@ import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
 export type { PublicThreadEvent } from "./public-thread-events.ts";
 import { actorHref, buildActorIndex, type PublicActorIndexRow, type PublicActorResource } from "./actor-index.ts";
 
+import { filterSemanticGraph, readSemanticGraph, type PublicSemanticGraph } from "./semantic-graph.ts";
+
 export const PUBLIC_API_SCHEMA = 1 as const;
 
 export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility">;
@@ -51,6 +53,7 @@ export type PublicApiIndex = {
   endpoints: {
     index: string;
     changes: string;
+    semantic: string;
     actors: string;
     actor: string;
     queues: string;
@@ -63,6 +66,7 @@ export type PublicApiIndex = {
   };
   resources: {
     changes: PublicResourceDescriptor;
+    semantic: PublicResourceDescriptor;
     actors: PublicResourceDescriptor;
     queues: PublicResourceDescriptor;
     recent: PublicResourceDescriptor;
@@ -200,6 +204,7 @@ export type PublicChanges = {
   revision: string;
   generatedAt: string;
   resources: {
+    semantic: PublicResourceDescriptor;
     actors: PublicResourceDescriptor;
     queues: PublicResourceDescriptor;
     recent: PublicResourceDescriptor;
@@ -213,6 +218,7 @@ export type PublicChanges = {
 export type CompiledPublicApi = {
   index: PublicApiIndex;
   changes: PublicChanges;
+  semantic: PublicSemanticGraph;
   actors: PublicActors;
   actorResources: Map<string, PublicActorContext>;
   queues: PublicWorkQueues;
@@ -430,6 +436,16 @@ export function compilePublicApi(
     (item): item is PublicContribution => item.visibility === "public",
   );
 
+  const allowedSemanticRepos = new Set(
+    publicItems.map((item) => item.repo).filter(
+      (repo): repo is string => typeof repo === "string" && safeRepoSegments(repo) !== null,
+    ),
+  );
+  const semantic = filterSemanticGraph(
+    readSemanticGraph(path.join(path.dirname(publicDbPath), "semantic-graph.json")),
+    allowedSemanticRepos,
+  );
+
   const itemsByRepo = new Map<string, PublicContribution[]>();
   for (const item of publicItems) {
     if (!item.repo || safeRepoSegments(item.repo) === null) continue;
@@ -611,6 +627,7 @@ export function compilePublicApi(
 
   const generatedAt = laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt);
   const coreResources = {
+    semantic: resourceDescriptor("semantic.json", semantic, latestIso(semantic.hotset.map((repo) => repo.lastActivityAt))),
     actors: resourceDescriptor("actors.json", actors, latestIso(actorRows.map((actor) => actor.lastSeenAt))),
     queues: resourceDescriptor("queues.json", queues, attentionState.updatedAt),
     recent: resourceDescriptor("recent.json", recent, generatedAt),
@@ -648,6 +665,7 @@ export function compilePublicApi(
   const endpoints = {
     index: "index.json",
     changes: "changes.json",
+    semantic: "semantic.json",
     actors: "actors.json",
     actor: "actors/{login}.json",
     queues: "queues.json",
@@ -714,6 +732,7 @@ export function compilePublicApi(
     changes,
     actors,
     actorResources,
+    semantic,
     queues,
     recent,
     attention,
@@ -741,6 +760,7 @@ export function writePublicApi(
 
   writeJson(path.join(root, "index.json"), compiled.index);
   writeJson(path.join(root, "changes.json"), compiled.changes);
+  writeJson(path.join(root, "semantic.json"), compiled.semantic);
   writeJson(path.join(root, "actors.json"), compiled.actors);
   for (const [login, resource] of compiled.actorResources) {
     writeJson(path.join(root, actorHref(login)), resource);

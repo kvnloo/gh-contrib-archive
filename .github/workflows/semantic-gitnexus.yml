@@ -1,0 +1,79 @@
+name: Refresh semantic graph
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Public repository hotset size
+        required: false
+        default: "5"
+        type: string
+      embeddings:
+        description: Enable GitNexus embeddings for semantic ranking
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: semantic-gitnexus
+  cancel-in-progress: false
+
+jobs:
+  semantic:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    env:
+      GITNEXUS_VERSION: "1.6.12"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nightly
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Install pinned GitNexus
+        run: npm install --global gitnexus@1.6.12
+      - name: Build semantic hotset
+        shell: bash
+        env:
+          SEMANTIC_LIMIT: ${{ inputs.limit }}
+          SEMANTIC_EMBEDDINGS: ${{ inputs.embeddings }}
+        run: |
+          set -euo pipefail
+          args=(--limit="$SEMANTIC_LIMIT" --out=data/semantic-graph.json)
+          if [ "$SEMANTIC_EMBEDDINGS" = "true" ]; then
+            args+=(--embeddings)
+          fi
+          npm run semantic:refresh -- "${args[@]}"
+      - name: Commit semantic graph only when content changed
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add data/semantic-graph.json
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "sync: refresh GitNexus semantic graph"
+          git push origin HEAD:nightly
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: semantic
+    if: needs.semantic.outputs.changed == 'true'
+    uses: ./.github/workflows/deploy-pages.yml
+    with:
+      ref: nightly
+    secrets: inherit
