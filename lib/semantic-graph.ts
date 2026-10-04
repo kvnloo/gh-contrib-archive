@@ -64,11 +64,18 @@ export function projectGitNexusResult(repo: string, raw: Json): SemanticRepoHit 
   const topProcesses = uniqueStrings(
     processes
       .slice(0, 5)
-      .map((item: Json) => item.name ?? item.label ?? item.id),
+      .map(
+        (item: Json) =>
+          item.summary ??
+          item.heuristicLabel ??
+          item.name ??
+          item.label ??
+          item.id,
+      ),
   );
   const topFiles = uniqueStrings(
-    symbols
-      .slice(0, 20)
+    [...symbols, ...definitions]
+      .slice(0, 30)
       .map((item: Json) => item.filePath ?? item.file_path),
   );
 
