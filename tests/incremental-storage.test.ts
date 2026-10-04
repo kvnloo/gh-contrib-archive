@@ -69,7 +69,7 @@ test("unchanged incremental rows do not churn ingested_at", () => {
 test("flag-only public changes are preserved without rewriting the contribution row", () => {
   const f = fixture();
   try {
-    const prefix = "a".repeat(500);
+    const prefix = `${"a".repeat(499)} `;
     const marker = "Hope this helps!";
     const plain = "x".repeat(marker.length);
     const row = {
