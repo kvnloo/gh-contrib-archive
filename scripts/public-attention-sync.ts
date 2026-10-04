@@ -104,4 +104,93 @@ function projectSearchRow(row) {
   const url = `https://github.com/${repo}/${isPr ? 'pull' : 'issues'}/${row.number}`;
   if (row.html_url !== url || typeof row.title !== 'string' || !Number.isFinite(Date.parse(row.updated_at))) return null;
   return { id: `${repo.toLowerCase()}#${row.number}`, repo, number: row.number, title: row.title.slice(0, 512), url, kind: isPr ? 'pull_request' : 'issue', state: row.state,
-    author: row.user.login, draft: Boolean(row.draft), updatedAt: row.updated_at, commentCount: Number.isSafeInteger(row.comments) 
+    author: row.user.login, draft: Boolean(row.draft), updatedAt: row.updated_at, commentCount: Number.isSafeInteger(row.comments) ? row.comments : null,
+    reviewDecision: ['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED'].includes(row.reviewDecision) ? row.reviewDecision : null, mergeState: ['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'DRAFT', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'].includes(row.mergeState) ? row.mergeState : null };
+}
+/** Search is capped at 1,000. Split disjoint creation-second intervals before paginating. */
+async function collectSearch(reader, query, { now = Date.now(), start = firstSecond, end = nowSecond(now) } = {}) {
+  if (!/(?:^|\s)is:public(?:\s|$)/.test(query)) throw new CollectionError('public_query_required');
+  const items = new Map(), partitions = []; let rootReported = null;
+  const walk = async (lo, hi) => {
+    const proof = { from: iso(lo), to: iso(hi), reported: null, fetched: 0, complete: false, reason: null };
+    try {
+      const url = new URL('https://api.github.com/search/issues');
+      url.searchParams.set('q', `${query} created:${proof.from}..${proof.to}`);
+      url.searchParams.set('per_page', '100'); url.searchParams.set('sort', 'created'); url.searchParams.set('order', 'asc');
+      let result = await reader.json(url.href);
+      const total = result.data.total_count;
+      if (!Number.isSafeInteger(total) || total < 0 || !Array.isArray(result.data.items)) throw new CollectionError('invalid_search');
+      if (rootReported === null) rootReported = total;
+      proof.reported = total;
+      if (result.data.incomplete_results) throw new CollectionError('github_search_incomplete');
+      if (total >= 1000) {
+        if (lo === hi) throw new CollectionError('search_second_saturated');
+        const mid = lo + Math.floor((hi - lo) / 2000) * 1000;
+        await walk(mid + 1000, hi); await walk(lo, mid); return;
+      }
+      const ids = new Set(), pages = new Set(); let pageUrl = url.href;
+      while (true) {
+        if (pages.has(pageUrl)) throw new CollectionError('pagination_loop');
+        pages.add(pageUrl);
+        if (result.data.incomplete_results || result.data.total_count !== total) throw new CollectionError('search_changed_during_scan');
+        for (const raw of result.data.items) {
+          const row = projectSearchRow(raw);
+          if (!row) throw new CollectionError('invalid_public_row');
+          ids.add(row.id); items.set(row.id, row);
+        }
+        proof.fetched = ids.size;
+        if (!result.next) break;
+        if (pages.size >= 10) throw new CollectionError('search_page_cap');
+        pageUrl = result.next; result = await reader.json(pageUrl);
+      }
+      if (ids.size !== total) throw new CollectionError('search_count_mismatch');
+      proof.complete = true;
+    } catch (e) { proof.reason = e instanceof CollectionError ? e.code : 'collection_error'; }
+    partitions.push(proof);
+  };
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) throw new RangeError('invalid search interval');
+  await walk(nowSecond(start), nowSecond(end));
+  const complete = partitions.every(p => p.complete) && items.size === rootReported;
+  return { items: [...items.values()], coverage: { source: 'github-public-search', scope: query, reported: rootReported, fetched: items.size, complete, partitions,
+    reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'search_changed_during_scan' } };
+}
+const PR_QUERY = `query($login:String!,$after:String){user(login:$login){pullRequests(first:100,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{number title url state isDraft updatedAt author{login} comments(first:1){totalCount} reviewDecision mergeStateStatus repository{nameWithOwner isPrivate visibility}}}}}`;
+async function collectAuthored(reader, login, { now = Date.now() } = {}) {
+  if (!validLogin(login)) throw new CollectionError('invalid_login');
+  if (!reader.token) return collectSearch(reader, `is:public is:pr is:open author:${login}`, { now });
+  const items = new Map(), seen = new Set(); let after = null, reported = null, walked = 0, suppressed = 0, unknownVisibility = 0, complete = false, reason = null;
+  try {
+    do {
+      const { data } = await reader.json('/graphql', { query: PR_QUERY, variables: { login, after } });
+      const c = data.data?.user?.pullRequests;
+      if (!c || !Array.isArray(c.nodes) || !Number.isSafeInteger(c.totalCount) || c.totalCount < 0 || typeof c.pageInfo?.hasNextPage !== 'boolean') throw new CollectionError('invalid_connection');
+      if (reported !== null && reported !== c.totalCount) throw new CollectionError('inventory_changed_during_scan');
+      reported = c.totalCount;
+      for (const node of c.nodes) {
+        walked++;
+        if (!node?.repository || node.repository.isPrivate !== false || node.repository.visibility !== 'PUBLIC') {
+          suppressed++;
+          if (node?.repository?.isPrivate !== true && !['PRIVATE', 'INTERNAL'].includes(node?.repository?.visibility)) unknownVisibility++;
+          continue;
+        }
+        const repo = node.repository.nameWithOwner;
+        if (node.author?.login?.toLowerCase() !== login.toLowerCase() || node.state !== 'OPEN') throw new CollectionError('inventory_scope_mismatch');
+        const row = projectSearchRow({ repository_url: `https://api.github.com/repos/${repo}`, number: node.number, title: node.title, html_url: node.url, user: node.author,
+          pull_request: {}, state: 'open', draft: node.isDraft, updated_at: node.updatedAt, comments: node.comments?.totalCount, reviewDecision: node.reviewDecision, mergeState: node.mergeStateStatus });
+        if (!row || items.has(row.id)) throw new CollectionError('inventory_duplicate_or_invalid');
+        items.set(row.id, row);
+      }
+      if (!c.pageInfo?.hasNextPage) { complete = walked === reported && unknownVisibility === 0; if (!complete) reason = unknownVisibility ? 'visibility_unverified' : 'inventory_count_mismatch'; break; }
+      const next = c.pageInfo.endCursor;
+      if (!next || seen.has(next)) throw new CollectionError('pagination_loop');
+      seen.add(next); after = next;
+    } while (true);
+  } catch (e) { reason = e instanceof CollectionError ? e.code : 'collection_error'; }
+  return { items: [...items.values()], coverage: { source: 'github-user-pullRequests', scope: 'authored-open-prs', reported, fetched: walked, public: items.size, suppressed, unknownVisibility, complete, reason } };
+}
+async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = [], now = Date.now() } = {}) {
+  if (!Array.isArray(pins) || pins.length > 500 || pins.some(r => !validRepo(r))) throw new RangeError('pins must contain at most 500 valid repository names');
+  if (!Number.isInteger(recentDays) || recentDays < 1 || recentDays > 365) throw new RangeError('recentDays must be 1..365');
+  const authored = await collectAuthored(reader, login, { now });
+  const since = new Date(now - recentDays * 86400_000).toISOString().slice(0, 10);
+  const recent = await collectSearch(reader, `is:public involves:${logi
