@@ -136,6 +136,7 @@ function desiredCommitRows(
   year: number,
   publicRows: readonly PublicCommitRow[],
   privateCommits: number,
+  login: string,
 ) {
   const rows = publicRows
     .map((row) => ({
@@ -144,7 +145,7 @@ function desiredCommitRows(
       repo: row.repo,
       visibility: "public",
       commit_count: row.count,
-      html_url: `https://github.com/${row.repo}/commits?author=kvnloo`,
+      html_url: `https://github.com/${row.repo}/commits?author=${login}`,
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
   if (privateCommits > 0) {
@@ -169,8 +170,9 @@ export function replaceCommitYearIfChanged(
   year: number,
   publicRows: readonly PublicCommitRow[],
   privateCommits: number,
+  login: string,
 ) {
-  const desired = desiredCommitRows(year, publicRows, privateCommits);
+  const desired = desiredCommitRows(year, publicRows, privateCommits, login);
   const current = db
     .prepare(
       `SELECT id, year, repo, visibility, commit_count, html_url
