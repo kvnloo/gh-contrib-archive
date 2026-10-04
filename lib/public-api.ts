@@ -740,6 +740,7 @@ export function compilePublicApi(
     schemaVersion: PUBLIC_API_SCHEMA,
     privacy: "public-safe" as const,
     kind: "github-materialized-read-api" as const,
+    coverage,
     endpoints,
     resources: Object.fromEntries(
       Object.entries(resources).map(([key, value]) => [
