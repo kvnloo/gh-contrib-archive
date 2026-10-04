@@ -7,6 +7,11 @@ on:
     - cron: "17 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 # The default branch owns scheduling, but the release implementation lives on
 # nightly. This keeps one publisher while still rebuilding whenever main's
 # canonical public.db advances.
