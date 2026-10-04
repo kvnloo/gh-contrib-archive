@@ -100,6 +100,7 @@ export type PublicAttention = {
   revision: string;
   updatedAt: string | null;
   count: number;
+  coverage: PublicApiIndex["coverage"];
   items: PublicAttentionItem[];
 };
 
