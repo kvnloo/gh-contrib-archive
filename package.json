@@ -19,7 +19,8 @@
     "dogfood:api": "node scripts/dogfood-api.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "inbox:public-sync": "tsx scripts/public-attention-sync.ts",
-    "semantic:refresh": "tsx scripts/gitnexus-semantic.ts"
+    "semantic:refresh": "tsx scripts/gitnexus-semantic.ts",
+    "eval:api": "node --experimental-strip-types scripts/eval-api.ts"
   },
   "dependencies": {
     "next": "16.3.5",

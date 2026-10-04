@@ -53,8 +53,31 @@ jobs:
           else
             echo "GH_INBOX_TOKEN is optional; public attention data was refreshed without credentials."
           fi
-      - run: npm test
-      - run: npm run build
+      - id: unit
+        run: npm test
+      - id: build
+        run: npm run build
+      - id: dogfood
+        run: npm run dogfood:api
+      - name: Evaluate API and record aggregate metrics
+        if: always()
+        env:
+          EVAL_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVAL_TEST_OUTCOME: ${{ steps.unit.outcome }}
+          EVAL_BUILD_OUTCOME: ${{ steps.build.outcome }}
+          EVAL_DOGFOOD_OUTCOME: ${{ steps.dogfood.outcome }}
+        run: npm run eval:api -- --require-export
+      - name: Retain API evaluation history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-evals-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .cache/api-evals/report.json
+            .cache/api-evals/summary.md
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static export
