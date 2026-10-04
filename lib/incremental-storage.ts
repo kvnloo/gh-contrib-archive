@@ -22,6 +22,15 @@ export type PublicCommitRow = {
   count: number;
 };
 
+type CommitBucketProjection = {
+  id: string;
+  year: number;
+  repo: string | null;
+  visibility: "public" | "private";
+  commit_count: number;
+  html_url: string | null;
+};
+
 function changed(result: { changes: number | bigint }) {
   return Number(result.changes) > 0;
 }
@@ -62,6 +71,18 @@ export function upsertContribution(db: DatabaseSync, row: IncrementalItem) {
 
   const excerpt = excerptOf(row.body);
   const extraJson = row.extra ? JSON.stringify(row.extra) : null;
+  const nextFlags = flagContribution({
+    type: row.type,
+    title: row.title,
+    body: row.body,
+  })
+    .map((flag) => ({
+      code: flag.code,
+      severity: flag.severity,
+      detail: flag.detail,
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
   const didChange = changed(
     db.prepare(
       `INSERT INTO contributions (
@@ -116,17 +137,23 @@ export function upsertContribution(db: DatabaseSync, row: IncrementalItem) {
     ),
   );
 
-  if (!didChange) return false;
+  let flagsChanged = didChange;
+  if (!didChange) {
+    const currentFlags = db
+      .prepare(
+        "SELECT code, severity, detail FROM flags WHERE contribution_id = ? ORDER BY code",
+      )
+      .all(row.id);
+    flagsChanged = JSON.stringify(currentFlags) !== JSON.stringify(nextFlags);
+  }
+
+  if (!didChange && !flagsChanged) return false;
 
   db.prepare("DELETE FROM flags WHERE contribution_id = ?").run(row.id);
   const insertFlag = db.prepare(
     "INSERT OR IGNORE INTO flags (contribution_id, code, severity, detail) VALUES (?, ?, ?, ?)",
   );
-  for (const flag of flagContribution({
-    type: row.type,
-    title: row.title,
-    body: row.body,
-  })) {
+  for (const flag of nextFlags) {
     insertFlag.run(row.id, flag.code, flag.severity, flag.detail);
   }
   return true;
@@ -138,7 +165,7 @@ function desiredCommitRows(
   privateCommits: number,
   login: string,
 ) {
-  const rows = publicRows
+  const rows: CommitBucketProjection[] = publicRows
     .map((row) => ({
       id: `${year}:${row.repo}`,
       year,
