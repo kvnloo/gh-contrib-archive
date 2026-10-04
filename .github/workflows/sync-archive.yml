@@ -1,0 +1,56 @@
+name: Sync public archive
+
+on:
+  schedule:
+    - cron: "17 11 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: archive-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Incremental sync into the committed public database
+        env:
+          GH_TOKEN: ${{ secrets.GH_ARCHIVE_TOKEN }}
+          GH_LOGIN: kvnloo
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "GH_ARCHIVE_TOKEN is not set; refusing to run a repo-scoped token against the contribution graph" >&2
+            exit 1
+          fi
+          npm run sync:incremental
+      - name: Commit public.db when it changed
+        run: |
+          git add data/public.db
+          if git diff --cached --quiet; then
+            echo "public.db unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "sync: refresh public contribution archive"
+          cp data/public.db /tmp/public.db.sync
+          git fetch origin main
+          git checkout -B main origin/main
+          cp /tmp/public.db.sync data/public.db
+          git add data/public.db
+          if git diff --cached --quiet; then
+            echo "public.db unchanged after rebase"
+            exit 0
+          fi
+          git commit -m "sync: refresh public contribution archive"
+          git push origin HEAD:main

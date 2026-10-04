@@ -5,22 +5,33 @@ import { describe, it } from "node:test";
 const deploy = readFileSync(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8");
 const nightly = readFileSync(new URL("../.github/workflows/automerge-nightly.yml", import.meta.url), "utf8");
 
-describe("Pages deployment after automated nightly promotion", () => {
-  it("exposes the deploy workflow as a reusable workflow", () => {
-    assert.match(deploy, /workflow_call:/);
-    assert.match(deploy, /ref:/);
-    assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*inputs\.ref\s*\|\|\s*github\.ref_name\s*\}\}/);
+describe("Pages deployment from main", () => {
+  it("refreshes and deploys the public API hourly from the default branch", () => {
+    assert.match(deploy, /branches:\s*\[main\]/);
+    assert.match(deploy, /schedule:[\s\S]*cron:\s*"17 \* \* \* \*"/);
+    assert.match(deploy, /workflow_dispatch:/);
+    assert.doesNotMatch(deploy, /workflow_call:/);
+    assert.match(deploy, /if:\s*github\.ref == 'refs\/heads\/main'/);
+    assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*github\.sha\s*\}\}/);
+    assert.match(deploy, /Restore public attention classifier cache/);
+    assert.match(deploy, /npm run inbox:public-sync/);
+    assert.match(deploy, /GH_INBOX_TOKEN/);
+    assert.match(deploy, /run: npm test/);
+    assert.match(deploy, /run: npm run build/);
+    assert.match(deploy, /run: npm run dogfood:api/);
+    assert.match(deploy, /npm run eval:api -- --require-export/);
+    assert.match(deploy, /public\/release\.json/);
+    assert.match(deploy, /actions\/configure-pages@v5/);
+    assert.match(deploy, /actions\/upload-pages-artifact@v4/);
+    assert.match(deploy, /path:\s*\.\/out/);
+    assert.match(deploy, /environment:[\s\S]*name:\s*github-pages/);
+    assert.match(deploy, /actions\/deploy-pages@v4/);
+    assert.doesNotMatch(deploy, /archive-pages/);
   });
 
-  it("uses a dedicated deployment environment for nightly Pages", () => {
-    assert.match(deploy, /environment:\s*[\s\S]*name:\s*archive-pages/);
-  });
-
-  it("calls Pages deployment from the nightly promotion workflow after merge", () => {
-    assert.match(nightly, /pages:\s*write/);
-    assert.match(nightly, /id-token:\s*write/);
-    assert.match(nightly, /needs:\s*automerge/);
-    assert.match(nightly, /uses:\s*\.\/\.github\/workflows\/deploy-pages\.yml/);
-    assert.match(nightly, /ref:\s*nightly/);
+  it("does not deploy from the nightly automerge workflow", () => {
+    assert.doesNotMatch(nightly, /pages:\s*write/);
+    assert.doesNotMatch(nightly, /id-token:\s*write/);
+    assert.doesNotMatch(nightly, /deploy-pages\.yml/);
   });
 });

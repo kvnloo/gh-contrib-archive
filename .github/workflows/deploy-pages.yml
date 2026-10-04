@@ -2,17 +2,10 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [nightly]
+    branches: [main]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      ref:
-        description: Git ref to build and deploy
-        required: false
-        type: string
-        default: nightly
 
 concurrency:
   group: pages
@@ -20,6 +13,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref_name }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -55,6 +49,9 @@ jobs:
           fi
       - id: unit
         run: npm test
+      - name: Record this public release
+        run: |
+          node -e "require('node:fs').writeFileSync('public/release.json', JSON.stringify({revision:process.env.GITHUB_SHA,builtAt:new Date().toISOString(),source:'public snapshot only'}))"
       - id: build
         run: npm run build
       - id: dogfood
@@ -62,7 +59,7 @@ jobs:
       - name: Evaluate API and record aggregate metrics
         if: always()
         env:
-          EVAL_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVAL_HEAD_SHA: ${{ github.sha }}
           EVAL_TEST_OUTCOME: ${{ steps.unit.outcome }}
           EVAL_BUILD_OUTCOME: ${{ steps.build.outcome }}
           EVAL_DOGFOOD_OUTCOME: ${{ steps.dogfood.outcome }}
@@ -86,13 +83,14 @@ jobs:
           path: ./out
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write
     environment:
-      name: archive-pages
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy

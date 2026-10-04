@@ -9,6 +9,7 @@
     "start": "next start --hostname 127.0.0.1 --port 43147",
     "lint": "eslint",
     "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts && npm run export:public && npm run export:api",
+    "sync:incremental": "tsx scripts/sync-incremental.ts",
     "privacy": "tsx scripts/privacy-sync.ts",
     "export:public": "tsx scripts/export-public.ts",
     "export:api": "tsx scripts/export-api.ts",
