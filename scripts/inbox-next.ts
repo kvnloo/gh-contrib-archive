@@ -20,6 +20,14 @@ if (json) {
   for (const record of records) {
     console.log(`${record.priority} ${record.repo}#${record.number} ${record.blocker} — ${record.title}`);
     console.log(`   next: ${record.nextAction}`);
+    if (record.latestExternalActor && record.latestExternalKind) {
+      const reviewState = record.latestExternalReviewState
+        ? ` ${record.latestExternalReviewState}`
+        : "";
+      console.log(
+        `   from: @${record.latestExternalActor} (${record.latestExternalKind}${reviewState})`,
+      );
+    }
     console.log(`   ${record.url}`);
   }
 }

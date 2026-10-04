@@ -6,6 +6,7 @@ import {
   type AttentionActivity,
   type PullRequestSnapshot,
 } from "../lib/attention.ts";
+import { mapConcurrent } from "../lib/async-pool.ts";
 
 type Json = Record<string, any>;
 
@@ -13,6 +14,10 @@ const login = process.env.GITHUB_PUBLIC_LOGIN?.trim() || "kvnloo";
 const deepLimit = Math.max(
   1,
   Math.min(24, Number(process.env.PUBLIC_ATTENTION_DEEP_LIMIT ?? "24") || 24),
+);
+const concurrency = Math.max(
+  1,
+  Math.min(8, Number(process.env.PUBLIC_ATTENTION_CONCURRENCY ?? "4") || 4),
 );
 const outputPath = path.join(process.cwd(), "data", "attention-seed.json");
 const API = "https://api.github.com";
@@ -110,26 +115,33 @@ async function main() {
       .map((item) => String(item.id)),
   );
 
-  const records = [];
-  let deepInspected = 0;
-  for (const item of items) {
+  const candidates = items.flatMap((item) => {
     const repo = repoFromApiUrl(item.repository_url);
-    if (!repo || !Number.isFinite(Number(item.number))) continue;
+    if (!repo || !Number.isFinite(Number(item.number))) return [];
+    return [{ item, repo }];
+  });
 
+  const inspected = await mapConcurrent(candidates, concurrency, async ({ item, repo }) => {
     let activities: AttentionActivity[] = [];
+    let deepInspected = false;
     if (deepKeys.has(String(item.id))) {
       try {
         activities = await deepActivities(repo, Number(item.number));
-        deepInspected += 1;
+        deepInspected = true;
       } catch (error) {
         console.warn(
           `attention deep inspection skipped for ${repo}#${item.number}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
-    records.push(classifyPullRequest(snapshotFromSearch(item, repo, activities), login));
-  }
+    return {
+      record: classifyPullRequest(snapshotFromSearch(item, repo, activities), login),
+      deepInspected,
+    };
+  });
 
+  const records = inspected.map(({ record }) => record);
+  const deepInspected = inspected.filter((item) => item.deepInspected).length;
   const sorted = sortAttention(records);
   const output = {
     schemaVersion: 1,
@@ -140,6 +152,7 @@ async function main() {
     cachedOpen: sorted.length,
     deepInspected,
     deepLimit,
+    concurrency,
     items: sorted,
   };
 
@@ -148,7 +161,7 @@ async function main() {
   const p0 = sorted.filter((item) => item.priority === "P0").length;
   const p1 = sorted.filter((item) => item.priority === "P1").length;
   console.log(
-    `Refreshed public attention hotset: ${sorted.length} PRs, ${deepInspected} deep-inspected, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} authored open PRs.`,
+    `Refreshed public attention hotset: ${sorted.length} PRs, ${deepInspected} deep-inspected at concurrency ${concurrency}, ${p0} P0, ${p1} P1; GitHub reports ${output.totalOpenReportedBySearch} authored open PRs.`,
   );
 }
 
