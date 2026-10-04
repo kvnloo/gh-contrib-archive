@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { PUBLIC_DB_PATH, openDb } from "../lib/db.ts";
 import { nextDay, pageIsOlderThan, searchDay, splitDay, watermarkFrom } from "../lib/incremental.ts";
-import { excerptOf, flagContribution } from "../lib/sanity.ts";
+import { replaceCommitYearIfChanged, upsertContribution, type IncrementalItem as Item } from "../lib/incremental-storage.ts";
 
 const LOGIN = process.env.GH_LOGIN ?? "kvnloo";
 const TOKEN = process.env.GH_ARCHIVE_TOKEN ?? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
@@ -16,21 +15,6 @@ if (!TOKEN) {
 type Gql = { data?: Record<string, unknown>; errors?: { message: string }[] };
 
 type Repo = { nameWithOwner: string; isPrivate?: boolean | null } | null;
-
-type Item = {
-  id: string;
-  type: string;
-  url: string;
-  repo?: string | null;
-  number?: number | null;
-  title?: string | null;
-  body?: string | null;
-  state?: string | null;
-  created_at: string;
-  updated_at?: string | null;
-  extra?: unknown;
-  isPrivate: boolean;
-};
 
 async function graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch("https://api.github.com/graphql", {
@@ -47,69 +31,6 @@ async function graphql<T>(query: string, variables: Record<string, unknown> = {}
     throw new Error(json.errors?.map((error) => error.message).join("; ") || `HTTP ${res.status}`);
   }
   return json;
-}
-
-function opaquePrivateId(githubId: string) {
-  const opaque = createHash("sha256").update(githubId).digest("hex").slice(0, 20);
-  return { id: `private:${opaque}`, url: `redacted://private/${opaque}` };
-}
-
-function upsert(db: DatabaseSync, row: Item) {
-  if (row.isPrivate) {
-    const opaque = opaquePrivateId(row.id);
-    db.prepare(
-      `INSERT INTO contributions (
-        id, github_node_id, type, url, html_url, repo, number, title, excerpt,
-        body_chars, state, visibility, created_at, updated_at, ingested_at, extra_json
-      ) VALUES (?, NULL, ?, ?, ?, NULL, NULL, NULL, NULL, 0, NULL, 'private', ?, NULL, datetime('now'), NULL)
-      ON CONFLICT(id) DO UPDATE SET
-        created_at=excluded.created_at,
-        ingested_at=datetime('now')`,
-    ).run(opaque.id, row.type, opaque.url, opaque.url, row.created_at);
-    return;
-  }
-
-  const excerpt = excerptOf(row.body);
-  db.prepare(
-    `INSERT INTO contributions (
-      id, github_node_id, type, url, html_url, repo, number, title, excerpt,
-      body_chars, state, visibility, created_at, updated_at, ingested_at, extra_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'public', ?, ?, datetime('now'), ?)
-    ON CONFLICT(id) DO UPDATE SET
-      title=excluded.title,
-      excerpt=excluded.excerpt,
-      body_chars=excluded.body_chars,
-      state=excluded.state,
-      visibility='public',
-      updated_at=excluded.updated_at,
-      ingested_at=datetime('now'),
-      extra_json=excluded.extra_json`,
-  ).run(
-    row.id,
-    row.id,
-    row.type,
-    row.url,
-    row.url,
-    row.repo ?? null,
-    row.number ?? null,
-    row.title ?? null,
-    excerpt,
-    (row.body ?? "").length,
-    row.state ?? null,
-    row.created_at,
-    row.updated_at ?? null,
-    row.extra ? JSON.stringify(row.extra) : null,
-  );
-  db.prepare("DELETE FROM flags WHERE contribution_id = ?").run(row.id);
-  for (const flag of flagContribution({ type: row.type, title: row.title, body: row.body })) {
-    db.prepare(
-      "INSERT OR IGNORE INTO flags (contribution_id, code, severity, detail) VALUES (?, ?, ?, ?)",
-    ).run(row.id, flag.code, flag.severity, flag.detail);
-  }
-}
-
-function isPrivateRepo(repo: Repo) {
-  return !repo || repo.isPrivate !== false;
 }
 
 async function searchIssues(db: DatabaseSync, query: string, type: "pull_request" | "issue") {
@@ -158,7 +79,7 @@ async function searchIssues(db: DatabaseSync, query: string, type: "pull_request
       if (!node?.id) continue;
       if (type === "pull_request" && node.__typename !== "PullRequest") continue;
       if (type === "issue" && node.__typename !== "Issue") continue;
-      upsert(db, {
+      upsertContribution(db, {
         id: node.id,
         type,
         url: node.url,
@@ -247,7 +168,7 @@ async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
     const conn = json.data.user.issueComments;
     for (const node of conn.nodes) {
       if (pageIsOlderThan([node.updatedAt], watermark)) continue;
-      upsert(db, {
+      upsertContribution(db, {
         id: node.id,
         type: "comment",
         url: node.url,
@@ -336,7 +257,7 @@ async function ingestReviewsSince(db: DatabaseSync, day: string) {
       for (const review of pr.reviews.nodes) {
         if (review.author?.login !== LOGIN) continue;
         if (review.body?.trim()) {
-          upsert(db, {
+          upsertContribution(db, {
             id: review.id,
             type: "review",
             url: review.url,
@@ -352,7 +273,7 @@ async function ingestReviewsSince(db: DatabaseSync, day: string) {
         }
         for (const comment of review.comments.nodes) {
           if (comment.author?.login !== LOGIN) continue;
-          upsert(db, {
+          upsertContribution(db, {
             id: comment.id,
             type: "review_comment",
             url: comment.url,
@@ -412,32 +333,16 @@ async function refreshCommitYear(db: DatabaseSync, year: number) {
     }
     publicRows.push({ repo: repo.nameWithOwner, count: row.contributions.totalCount });
   }
-  db.exec("BEGIN");
-  try {
-    db.prepare("DELETE FROM commit_buckets WHERE year = ?").run(year);
-    const insert = db.prepare(
-      `INSERT INTO commit_buckets (id, year, repo, visibility, commit_count, html_url)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    );
-    for (const row of publicRows) {
-      insert.run(
-        `${year}:${row.repo}`,
-        year,
-        row.repo,
-        "public",
-        row.count,
-        `https://github.com/${row.repo}/commits?author=${LOGIN}`,
-      );
-    }
-    if (privateCommits > 0) {
-      insert.run(`private:${year}`, year, null, "private", privateCommits, null);
-    }
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
-  console.log(`commits ${year}: ${publicRows.length} public repos, private count ${privateCommits}`);
+  const changed = replaceCommitYearIfChanged(
+    db,
+    year,
+    publicRows,
+    privateCommits,
+    LOGIN,
+  );
+  console.log(
+    `commits ${year}: ${publicRows.length} public repos, private count ${privateCommits}, changed=${changed}`,
+  );
 }
 
 async function main() {
