@@ -21,6 +21,16 @@
     "openclaw/openclaw",
     "kvnloo/z0intelligence",
     "kvnloo/aodl",
-    "kvnloo/z0archy"
+    "kvnloo/z0archy",
+    "kvnloo/cua",
+    "kvnloo/tokenomics",
+    "kvnloo/ace",
+    "kvnloo/evolution-lab",
+    "kvnloo/frontier-kb",
+    "kvnloo/agenttrace",
+    "kvnloo/z0",
+    "kvnloo/flow",
+    "kvnloo/memento",
+    "kvnloo/kerdoios"
   ]
 }
