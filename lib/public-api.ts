@@ -454,6 +454,17 @@ export function compilePublicApi(
   const attentionState = readPublicAttention(attentionDbPath);
   const attentionItems = attentionState.records.map(publicAttentionItem);
   const rawCoverage = attentionState.coverage ?? {};
+  const coverage: PublicApiIndex["coverage"] = {
+    source: attentionState.coverage ? "covered-public-inventory" : "legacy",
+    observedAt:
+      typeof rawCoverage.observedAt === "string" ? rawCoverage.observedAt : null,
+    recentSince:
+      typeof rawCoverage.recentSince === "string" ? rawCoverage.recentSince : null,
+    inventoryComplete: rawCoverage.complete === true,
+    feedbackComplete: rawCoverage.feedbackComplete === true,
+    checksComplete: false,
+    activeRepos: [],
+  };
   const threadEventRows = readPublicThreadEvents(attentionDbPath);
   const legacyEvents = readThreadEventsSeed(
     path.join(path.dirname(attentionDbPath), "thread-events-seed.json"),
