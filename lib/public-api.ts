@@ -13,19 +13,14 @@ import {
   type PublicArchive,
 } from "./public-snapshot.ts";
 import { contentRevision, prettyJsonBytes } from "./resource-revision.ts";
+import { readThreadEventsSeed, projectPublicThreadEvents, type PublicThreadEvent } from "./public-thread-events.ts";
+import { buildWorkQueues, type WorkQueueName } from "./work-queues.ts";
+import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
+export type { PublicThreadEvent } from "./public-thread-events.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
 export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility">;
-
-export type PublicThreadEvent = {
-  id: string;
-  kind: "comment" | "review";
-  actor: string;
-  at: string;
-  reviewState: string | null;
-  url: string | null;
-};
 
 type PublicThreadEventSeedRow = {
   repo: string;
@@ -55,6 +50,8 @@ export type PublicApiIndex = {
   endpoints: {
     index: string;
     changes: string;
+    queues: string;
+    recent: string;
     attention: string;
     contributions: string;
     repos: string;
@@ -63,6 +60,8 @@ export type PublicApiIndex = {
   };
   resources: {
     changes: PublicResourceDescriptor;
+    queues: PublicResourceDescriptor;
+    recent: PublicResourceDescriptor;
     attention: PublicResourceDescriptor;
     contributions: PublicResourceDescriptor;
     repos: PublicResourceDescriptor;
@@ -82,6 +81,24 @@ export type PublicAttention = {
   updatedAt: string | null;
   count: number;
   items: PublicAttentionItem[];
+};
+
+export type PublicWorkQueues = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  revision: string;
+  updatedAt: string | null;
+  counts: Record<WorkQueueName, number>;
+  queues: Record<WorkQueueName, PublicAttentionItem[]>;
+};
+
+export type PublicRecentThreads = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  revision: string;
+  generatedAt: string;
+  count: number;
+  items: RecentThread[];
 };
 
 export type PublicContributions = PublicArchive & {
@@ -149,6 +166,8 @@ export type PublicThreadResource = {
   contributions: PublicContribution[];
   attention: PublicAttentionItem[];
   events: PublicThreadEvent[];
+  eventsUpdatedAt: string | null;
+  eventSourceUpdatedAt: string | null;
   evidenceRefs: string[];
   links: {
     self: string;
@@ -163,6 +182,8 @@ export type PublicChanges = {
   revision: string;
   generatedAt: string;
   resources: {
+    queues: PublicResourceDescriptor;
+    recent: PublicResourceDescriptor;
     attention: PublicResourceDescriptor;
     contributions: PublicResourceDescriptor;
     repos: PublicResourceDescriptor;
@@ -173,6 +194,8 @@ export type PublicChanges = {
 export type CompiledPublicApi = {
   index: PublicApiIndex;
   changes: PublicChanges;
+  queues: PublicWorkQueues;
+  recent: PublicRecentThreads;
   attention: PublicAttention;
   contributions: PublicContributions;
   repos: PublicRepoIndex;
@@ -260,30 +283,7 @@ function readPublicThreadEvents(attentionDbPath: string): PublicThreadEventSeedR
       ) {
         continue;
       }
-      const events: PublicThreadEvent[] = [];
-      for (const rawEvent of row.events) {
-        if (!rawEvent || typeof rawEvent !== "object") continue;
-        const event = rawEvent as Record<string, unknown>;
-        if (
-          typeof event.id !== "string" ||
-          (event.kind !== "comment" && event.kind !== "review") ||
-          typeof event.actor !== "string" ||
-          typeof event.at !== "string"
-        ) {
-          continue;
-        }
-        events.push({
-          id: event.id,
-          kind: event.kind,
-          actor: event.actor,
-          at: event.at,
-          reviewState: typeof event.reviewState === "string" ? event.reviewState : null,
-          url:
-            typeof event.url === "string" && event.url.startsWith("https://github.com/")
-              ? event.url
-              : null,
-        });
-      }
+      const events = projectPublicThreadEvents(row.events);
       if (events.length > 0) rows.push({ repo: row.repo, number: row.number, events });
     }
     return rows;
@@ -340,6 +340,8 @@ function buildThreadResource(
   contributions: PublicContribution[],
   attention: PublicAttentionItem[],
   events: PublicThreadEvent[],
+  eventsUpdatedAt: string | null,
+  eventSourceUpdatedAt: string | null,
 ): PublicThreadResource {
   const [owner, name] = safeRepoSegments(repo)!;
   const root = contributions.find((item) =>
@@ -388,7 +390,7 @@ function buildThreadResource(
       repo: `repos/${owner}/${name}.json`,
     },
   };
-  return { ...base, revision: contentRevision(base) };
+  return { ...base, revision: contentRevision(base), eventsUpdatedAt, eventSourceUpdatedAt };
 }
 
 export function compilePublicApi(
@@ -399,6 +401,9 @@ export function compilePublicApi(
   const attentionState = readPublicAttention(attentionDbPath);
   const attentionItems = attentionState.records.map(publicAttentionItem);
   const threadEventRows = readPublicThreadEvents(attentionDbPath);
+  const legacyEvents = readThreadEventsSeed(
+    path.join(path.dirname(attentionDbPath), "thread-events-seed.json"),
+  );
 
   const publicItems = snapshot.archive.items.filter(
     (item): item is PublicContribution => item.visibility === "public",
@@ -451,15 +456,23 @@ export function compilePublicApi(
 
     const threads: PublicThreadDescriptor[] = [];
     for (const number of [...numbers].sort((a, b) => a - b)) {
+      // The current collector/cache seed wins. Legacy state can only enrich an
+      // already-public thread, never introduce repository/thread identities.
+      const currentEvents = threadEvents
+        .filter((row) => row.number === number)
+        .flatMap((row) => row.events);
+      const legacy = legacyEvents?.threads[`${repo}#${number}`];
+      const events = currentEvents.length > 0 ? currentEvents : legacy?.events ?? [];
       const resource = buildThreadResource(
         repo,
         number,
         contributions.filter((item) => item.number === number),
         attention.filter((item) => item.number === number),
-        threadEvents
-          .filter((row) => row.number === number)
-          .flatMap((row) => row.events)
-          .sort((a, b) => a.at.localeCompare(b.at)),
+        [...events].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)),
+        currentEvents.length > 0 ? attentionState.updatedAt : legacy ? legacyEvents!.updatedAt : null,
+        currentEvents.length > 0
+          ? latestIso(attention.filter((item) => item.number === number).map((item) => item.updatedAt))
+          : legacy?.sourceUpdatedAt ?? null,
       );
       threadResources.set(`${repo}#${number}`, resource);
       threads.push({
@@ -502,6 +515,33 @@ export function compilePublicApi(
     });
   }
 
+  const groupedQueues = buildWorkQueues(attentionItems);
+  const queuesBase = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe" as const,
+    counts: Object.fromEntries(
+      Object.entries(groupedQueues).map(([name, items]) => [name, items.length]),
+    ) as Record<WorkQueueName, number>,
+    queues: groupedQueues,
+  };
+  const queues: PublicWorkQueues = {
+    ...queuesBase,
+    revision: contentRevision(queuesBase),
+    updatedAt: attentionState.updatedAt,
+  };
+  const recentItems = buildRecentThreads(publicItems, attentionItems);
+  const recentBase = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe" as const,
+    count: recentItems.length,
+    items: recentItems,
+  };
+  const recent: PublicRecentThreads = {
+    ...recentBase,
+    revision: contentRevision(recentBase),
+    generatedAt: laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt),
+  };
+
   const attentionBase = {
     schemaVersion: PUBLIC_API_SCHEMA,
     privacy: "public-safe" as const,
@@ -532,6 +572,8 @@ export function compilePublicApi(
 
   const generatedAt = laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt);
   const coreResources = {
+    queues: resourceDescriptor("queues.json", queues, attentionState.updatedAt),
+    recent: resourceDescriptor("recent.json", recent, generatedAt),
     attention: resourceDescriptor("attention.json", attention, attentionState.updatedAt),
     contributions: resourceDescriptor(
       "contributions.json",
@@ -566,6 +608,8 @@ export function compilePublicApi(
   const endpoints = {
     index: "index.json",
     changes: "changes.json",
+    queues: "queues.json",
+    recent: "recent.json",
     attention: "attention.json",
     contributions: "contributions.json",
     repos: "repos.json",
@@ -626,6 +670,8 @@ export function compilePublicApi(
   return {
     index,
     changes,
+    queues,
+    recent,
     attention,
     contributions,
     repos,
@@ -651,6 +697,8 @@ export function writePublicApi(
 
   writeJson(path.join(root, "index.json"), compiled.index);
   writeJson(path.join(root, "changes.json"), compiled.changes);
+  writeJson(path.join(root, "queues.json"), compiled.queues);
+  writeJson(path.join(root, "recent.json"), compiled.recent);
   writeJson(path.join(root, "attention.json"), compiled.attention);
   writeJson(path.join(root, "contributions.json"), compiled.contributions);
   writeJson(path.join(root, "repos.json"), compiled.repos);

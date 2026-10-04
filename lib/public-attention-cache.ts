@@ -9,6 +9,8 @@ export type AttentionCacheEvent = {
   id: string;
   kind: "comment" | "review";
   actor: string;
+  actorType?: string | null;
+  authorAssociation?: string | null;
   at: string;
   reviewState: string | null;
   url: string | null;
@@ -21,7 +23,12 @@ export function projectAttentionEvents(value: unknown): AttentionCacheEvent[] {
     if (!event || typeof event !== "object" || typeof event.id !== "string" ||
         (event.kind !== "comment" && event.kind !== "review") ||
         typeof event.actor !== "string" || typeof event.at !== "string") return [];
-    return [{ id: event.id, kind: event.kind, actor: event.actor, at: event.at,
+    const actorTypes = ["User", "Bot", "Organization", "Mannequin"];
+    const associations = ["COLLABORATOR", "CONTRIBUTOR", "FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR", "MANNEQUIN", "MEMBER", "NONE", "OWNER"];
+    return [{
+      ...(actorTypes.includes(event.actorType) ? { actorType: event.actorType } : {}),
+      ...(associations.includes(event.authorAssociation) ? { authorAssociation: event.authorAssociation } : {}),
+      id: event.id, kind: event.kind, actor: event.actor, at: event.at,
       reviewState: typeof event.reviewState === "string" ? event.reviewState : null,
       url: typeof event.url === "string" && event.url.startsWith("https://github.com/") ? event.url : null }];
   }).sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
