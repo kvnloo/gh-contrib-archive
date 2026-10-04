@@ -65,6 +65,50 @@ test("unchanged incremental rows do not churn ingested_at", () => {
   }
 });
 
+
+test("flag-only public changes are preserved without rewriting the contribution row", () => {
+  const f = fixture();
+  try {
+    const prefix = "a".repeat(500);
+    const marker = "Hope this helps!";
+    const plain = "x".repeat(marker.length);
+    const row = {
+      id: "COMMENT_flag",
+      type: "comment",
+      url: "https://github.com/example/repo/issues/1#issuecomment-1",
+      repo: "example/repo",
+      number: 1,
+      title: "Example",
+      body: prefix + plain,
+      created_at: "2026-10-01T00:00:00Z",
+      updated_at: "2026-10-02T00:00:00Z",
+      isPrivate: false,
+    };
+
+    assert.equal(row.body.length, (prefix + marker).length);
+    assert.equal(upsertContribution(f.db, row), true);
+    f.db
+      .prepare("UPDATE contributions SET ingested_at = ? WHERE id = ?")
+      .run("2000-01-01 00:00:00", row.id);
+
+    assert.equal(
+      upsertContribution(f.db, { ...row, body: prefix + marker }),
+      true,
+    );
+    const contribution = f.db
+      .prepare("SELECT ingested_at FROM contributions WHERE id = ?")
+      .get(row.id) as { ingested_at: string };
+    assert.equal(contribution.ingested_at, "2000-01-01 00:00:00");
+
+    const flags = f.db
+      .prepare("SELECT code FROM flags WHERE contribution_id = ? ORDER BY code")
+      .all(row.id) as { code: string }[];
+    assert.ok(flags.some((flag) => flag.code === "generic_ai_slop"));
+  } finally {
+    f.cleanup();
+  }
+});
+
 test("unchanged yearly commit buckets are not rewritten", () => {
   const f = fixture();
   try {
