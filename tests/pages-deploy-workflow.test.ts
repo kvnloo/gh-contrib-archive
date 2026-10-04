@@ -14,9 +14,14 @@ describe("Pages deployment from main", () => {
     assert.match(deploy, /if:\s*github\.ref == 'refs\/heads\/main'/);
     assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*github\.sha\s*\}\}/);
     assert.match(deploy, /permissions:[\s\S]*contents:\s*write/);
-    assert.match(deploy, /Restore public attention classifier cache/);
+    assert.match(deploy, /Restore bounded covered-inbox cache/);
+    assert.match(deploy, /\.cache\/covered-attention\.json/);
+    assert.match(deploy, /Refresh complete public work inventory/);
     assert.match(deploy, /npm run inbox:public-sync/);
     assert.match(deploy, /GH_INBOX_TOKEN/);
+    assert.doesNotMatch(deploy, /npm run inbox:sync/);
+    assert.match(deploy, /inventoryComplete/);
+    assert.match(deploy, /bilawalsidhu\/gods-eye-view\.json/);
     assert.match(deploy, /run: npm test/);
     assert.match(deploy, /run: npm run build/);
     assert.match(deploy, /run: npm run dogfood:api/);
@@ -28,6 +33,7 @@ describe("Pages deployment from main", () => {
     assert.match(deploy, /path:\s*\.\/out/);
     assert.match(deploy, /environment:[\s\S]*name:\s*github-pages/);
     assert.match(deploy, /actions\/deploy-pages@v4/);
+    assert.match(deploy, /Verify deployed covered inbox/);
     assert.doesNotMatch(deploy, /archive-pages/);
   });
 
