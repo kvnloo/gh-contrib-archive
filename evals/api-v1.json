@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "source": "synthetic",
+  "selfLogin": "fixture-self",
+  "defaults": {
+    "repo": "fixture/repo",
+    "repoVisibility": "public",
+    "number": 101,
+    "title": "Synthetic change",
+    "url": "https://github.com/fixture/repo/pull/101",
+    "state": "OPEN",
+    "isDraft": false,
+    "author": "fixture-self",
+    "reviewDecision": null,
+    "mergeState": null,
+    "updatedAt": "2026-01-01T00:30:00Z",
+    "notificationReasons": [],
+    "activities": [],
+    "checks": []
+  },
+  "cases": [
+    {
+      "id": "verification-request",
+      "snapshot": {
+        "activities": [
+          {
+            "actor": "fixture-reviewer",
+            "body": "Please run the focused regression test.",
+            "at": "2026-01-01T00:10:00Z",
+            "kind": "comment",
+            "reviewState": null
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P0",
+        "blocker": "verification_requested",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "scope-request",
+      "snapshot": {
+        "activities": [
+          {
+            "actor": "fixture-reviewer",
+            "body": "Please address the cross-runtime identity constraint.",
+            "at": "2026-01-01T00:10:00Z",
+            "kind": "comment",
+            "reviewState": null
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P0",
+        "blocker": "external_action_requested",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "requested-changes",
+      "snapshot": {
+        "activities": [
+          {
+            "actor": "fixture-reviewer",
+            "body": "An edge case remains.",
+            "at": "2026-01-01T00:10:00Z",
+            "kind": "review",
+            "reviewState": "CHANGES_REQUESTED"
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P0",
+        "blocker": "changes_requested",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "positive-review",
+      "snapshot": {
+        "activities": [
+          {
+            "actor": "fixture-reviewer",
+            "body": "Tests passed. No new finding in this focused pass.",
+            "at": "2026-01-01T00:10:00Z",
+            "kind": "comment",
+            "reviewState": null
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P2",
+        "blocker": "review_update_no_action",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "ignore-bot-request",
+      "snapshot": {
+        "activities": [
+          {
+            "actor": "fixture[bot]",
+            "body": "Please run tests.",
+            "at": "2026-01-01T00:10:00Z",
+            "kind": "comment",
+            "reviewState": null
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P2",
+        "blocker": "awaiting_review",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "answered-request",
+      "snapshot": {
+        "activities": [
+          {
+            "actor": "fixture-reviewer",
+            "body": "Please run tests.",
+            "at": "2026-01-01T00:10:00Z",
+            "kind": "comment",
+            "reviewState": null
+          },
+          {
+            "actor": "fixture-self",
+            "body": "Evidence posted.",
+            "at": "2026-01-01T00:20:00Z",
+            "kind": "comment",
+            "reviewState": null
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P2",
+        "blocker": "awaiting_review",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "failing-ci",
+      "snapshot": {
+        "checks": [
+          {
+            "name": "test",
+            "state": "FAILURE"
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P1",
+        "blocker": "ci_failed",
+        "ciState": "failing"
+      }
+    },
+    {
+      "id": "approval-with-queued-ci",
+      "snapshot": {
+        "reviewDecision": "APPROVED",
+        "checks": [
+          {
+            "name": "test",
+            "state": "QUEUED"
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P2",
+        "blocker": "awaiting_review",
+        "ciState": "pending"
+      }
+    },
+    {
+      "id": "approval-with-passing-ci",
+      "snapshot": {
+        "reviewDecision": "APPROVED",
+        "checks": [
+          {
+            "name": "test",
+            "state": "SUCCESS"
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P1",
+        "blocker": "approved",
+        "ciState": "passing"
+      }
+    },
+    {
+      "id": "superseded-fix",
+      "snapshot": {
+        "activities": [
+          {
+            "actor": "fixture-reviewer",
+            "body": "This is covered by #99.",
+            "at": "2026-01-01T00:10:00Z",
+            "kind": "comment",
+            "reviewState": null
+          }
+        ]
+      },
+      "expected": {
+        "priority": "P1",
+        "blocker": "superseded_candidate",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "merge-conflict",
+      "snapshot": {
+        "mergeState": "DIRTY"
+      },
+      "expected": {
+        "priority": "P1",
+        "blocker": "merge_conflict",
+        "ciState": "none"
+      }
+    },
+    {
+      "id": "waiting-for-review",
+      "snapshot": {},
+      "expected": {
+        "priority": "P2",
+        "blocker": "awaiting_review",
+        "ciState": "none"
+      }
+    }
+  ]
+}
