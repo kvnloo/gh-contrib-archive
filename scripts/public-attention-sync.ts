@@ -203,7 +203,23 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
   const pinned = []; let unavailablePins = 0;
   for (const repo of [...new Set(pins)]) {
     if (!validRepo(repo)) throw new CollectionError('invalid_repo_pin');
-    // Positive public visibility is required even for a configured pin.
+    // Authored/recent discovery already proved this repository public. A pin
+    // only extends its retention horizon; do not spend two more requests.
+    if (known.has(repo.toLowerCase())) {
+      pinned.push({
+        repo,
+        coverage: {
+          source: 'already-observed-public',
+          scope: `repo:${repo}`,
+          reported: null,
+          fetched: 0,
+          complete: true,
+          reason: null,
+        },
+      });
+      continue;
+    }
+    // Quiet pins still require positive public visibility before publication.
     try {
       const { data } = await reader.json(`/repos/${repo}`);
       if (data.private !== false || data.visibility !== 'public' || !validRepo(data.full_name)) throw new CollectionError('pin_not_public');
