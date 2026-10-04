@@ -13,6 +13,9 @@ describe("Pages deployment from main", () => {
     assert.match(deploy, /schedule:/);
     assert.match(deploy, /cron:\s*"17 \* \* \* \*"/);
     assert.match(deploy, /workflow_dispatch:/);
+    assert.match(deploy, /permissions:[\s\S]*contents:\s*read/);
+    assert.match(deploy, /permissions:[\s\S]*pages:\s*write/);
+    assert.match(deploy, /permissions:[\s\S]*id-token:\s*write/);
     assert.match(
       deploy,
       /uses:\s*kvnloo\/gh-contrib-archive\/\.github\/workflows\/deploy-pages\.yml@nightly/,
