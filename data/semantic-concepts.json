@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "concepts": [
+    {
+      "id": "routing",
+      "query": "model routing provider selection fallback routing"
+    },
+    {
+      "id": "memory",
+      "query": "memory retrieval persistence context recall"
+    },
+    {
+      "id": "context",
+      "query": "context compression token reduction prompt context filtering"
+    },
+    {
+      "id": "computer-use",
+      "query": "computer use browser automation UI interaction"
+    },
+    {
+      "id": "coordination",
+      "query": "agent coordination multi agent orchestration messaging"
+    },
+    {
+      "id": "evaluation",
+      "query": "evaluation verification benchmark testing evidence"
+    },
+    {
+      "id": "performance",
+      "query": "cache concurrency latency performance batching"
+    },
+    {
+      "id": "privacy",
+      "query": "credentials secrets privacy redaction access control"
+    },
+    {
+      "id": "multimodal",
+      "query": "voice multimodal speech image video interface"
+    },
+    {
+      "id": "workflow",
+      "query": "workflow orchestration queue state machine task scheduling"
+    }
+  ]
+}
