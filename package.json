@@ -16,6 +16,7 @@
     "inbox:sync": "tsx scripts/inbox-sync.ts",
     "inbox:next": "tsx scripts/inbox-next.ts",
     "inbox": "npm run inbox:sync && npm run inbox:next",
+    "dogfood:api": "node scripts/dogfood-api.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "inbox:public-sync": "tsx scripts/public-attention-sync.ts",
     "semantic:refresh": "tsx scripts/gitnexus-semantic.ts"

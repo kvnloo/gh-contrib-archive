@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { contentRevision as stableRevision } from "./resource-revision.ts";
 import fs from "node:fs";
 
 export const SEMANTIC_GRAPH_SCHEMA = 1 as const;
@@ -87,10 +87,6 @@ export function projectGitNexusResult(repo: string, raw: Json): SemanticRepoHit 
     topProcesses,
     topFiles,
   };
-}
-
-function stableRevision(value: unknown) {
-  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
 export function compileSemanticGraph(args: {
@@ -197,24 +193,71 @@ export function readSemanticGraph(filePath: string): PublicSemanticGraph {
   }
 }
 
+function objectRow(value: unknown): Json | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Json
+    : null;
+}
+
+function nonnegativeCount(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function metadataStrings(value: unknown, limit: number): string[] {
+  return uniqueStrings(Array.isArray(value) ? value : []).slice(0, limit);
+}
+
 export function filterSemanticGraph(
   graph: PublicSemanticGraph,
   allowedRepos: ReadonlySet<string>,
 ): PublicSemanticGraph {
-  const hotset = graph.hotset.filter((item) => allowedRepos.has(item.repo));
-  const concepts = graph.concepts.map((concept) => ({
-    ...concept,
-    repos: concept.repos.filter((item) => allowedRepos.has(item.repo)),
-  }));
-  const repoLinks = graph.repoLinks.filter(
-    (link) => allowedRepos.has(link.source) && allowedRepos.has(link.target),
-  );
+  if (!graph || graph.schemaVersion !== SEMANTIC_GRAPH_SCHEMA || graph.privacy !== "public-safe") {
+    return emptySemanticGraph();
+  }
+  // Treat the persisted snapshot as untrusted. Filtering identities alone is not
+  // sufficient: explicitly project each nested record before public export.
+  const hotset = (Array.isArray(graph.hotset) ? graph.hotset : []).flatMap((value): SemanticHotsetRepo[] => {
+    const row = objectRow(value);
+    if (!row || !allowedRepos.has(row.repo) ||
+        !["indexed", "clone_failed", "analyze_failed"].includes(row.status)) return [];
+    return [{
+      repo: row.repo,
+      alias: typeof row.alias === "string" ? row.alias : row.repo.replace("/", "__"),
+      sha: typeof row.sha === "string" ? row.sha : null,
+      lastActivityAt: typeof row.lastActivityAt === "string" ? row.lastActivityAt : null,
+      activityCount: nonnegativeCount(row.activityCount),
+      status: row.status,
+    }];
+  });
+  const concepts = (Array.isArray(graph.concepts) ? graph.concepts : []).flatMap((value): SemanticConcept[] => {
+    const row = objectRow(value);
+    if (!row || typeof row.id !== "string" || typeof row.query !== "string") return [];
+    const repos = (Array.isArray(row.repos) ? row.repos : []).flatMap((value: unknown): SemanticRepoHit[] => {
+      const hit = objectRow(value);
+      if (!hit || !allowedRepos.has(hit.repo)) return [];
+      return [{
+        repo: hit.repo,
+        processCount: nonnegativeCount(hit.processCount),
+        definitionCount: nonnegativeCount(hit.definitionCount),
+        symbolCount: nonnegativeCount(hit.symbolCount),
+        topProcesses: metadataStrings(hit.topProcesses, 5),
+        topFiles: metadataStrings(hit.topFiles, 30),
+      }];
+    });
+    return [{ id: row.id, query: row.query, repos }];
+  });
+  const repoLinks = (Array.isArray(graph.repoLinks) ? graph.repoLinks : []).flatMap((value): SemanticRepoLink[] => {
+    const row = objectRow(value);
+    if (!row || !allowedRepos.has(row.source) || !allowedRepos.has(row.target)) return [];
+    const sharedConcepts = metadataStrings(row.sharedConcepts, concepts.length);
+    return [{ source: row.source, target: row.target, sharedConcepts, weight: sharedConcepts.length }];
+  });
   const stable = {
     schemaVersion: SEMANTIC_GRAPH_SCHEMA,
     privacy: "public-safe" as const,
-    source: graph.source,
-    gitnexusVersion: graph.gitnexusVersion,
-    embeddings: graph.embeddings,
+    source: graph.source === "gitnexus" ? "gitnexus" as const : "unavailable" as const,
+    gitnexusVersion: typeof graph.gitnexusVersion === "string" ? graph.gitnexusVersion : null,
+    embeddings: graph.embeddings === true,
     hotset,
     concepts,
     repoLinks,
