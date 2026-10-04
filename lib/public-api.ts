@@ -453,6 +453,7 @@ export function compilePublicApi(
   const snapshot = compilePublicSnapshot(publicDbPath);
   const attentionState = readPublicAttention(attentionDbPath);
   const attentionItems = attentionState.records.map(publicAttentionItem);
+  const rawCoverage = attentionState.coverage ?? {};
   const threadEventRows = readPublicThreadEvents(attentionDbPath);
   const legacyEvents = readThreadEventsSeed(
     path.join(path.dirname(attentionDbPath), "thread-events-seed.json"),
