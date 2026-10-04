@@ -84,6 +84,8 @@ function publicThreadEvent(item: Json, kind: "comment" | "review", at: unknown, 
   if (!actor || !timestamp || !Number.isFinite(numericId)) return null;
   return {
     id: `${kind}:${numericId}`, kind, actor, at: timestamp,
+    actorType: typeof item.user?.type === "string" ? item.user.type : null,
+    authorAssociation: typeof item.author_association === "string" ? item.author_association : null,
     reviewState: reviewState == null ? null : String(reviewState),
     url: typeof item.html_url === "string" && item.html_url.startsWith("https://github.com/") ? item.html_url : null,
   };
