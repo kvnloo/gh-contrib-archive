@@ -4,16 +4,24 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 43147",
-    "prebuild": "npm run export:public",
+    "prebuild": "npm run export:public && npm run export:api",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 43147",
     "lint": "eslint",
-    "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts && npm run export:public",
+    "ingest": "tsx scripts/ingest.ts && tsx scripts/privacy-sync.ts && npm run export:public && npm run export:api",
     "sync:incremental": "tsx scripts/sync-incremental.ts",
     "privacy": "tsx scripts/privacy-sync.ts",
     "export:public": "tsx scripts/export-public.ts",
     "sanity": "tsx scripts/sanity-report.ts",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "export:api": "tsx scripts/export-api.ts",
+    "inbox:sync": "tsx scripts/inbox-sync.ts",
+    "inbox:next": "tsx scripts/inbox-next.ts",
+    "inbox": "npm run inbox:sync && npm run inbox:next",
+    "dogfood:api": "node scripts/dogfood-api.mjs",
+    "inbox:public-sync": "tsx scripts/public-attention-sync.ts",
+    "semantic:refresh": "tsx scripts/gitnexus-semantic.ts",
+    "eval:api": "node --experimental-strip-types scripts/eval-api.ts"
   },
   "dependencies": {
     "next": "16.3.5",

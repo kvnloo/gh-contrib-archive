@@ -3,7 +3,16 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 * * * *"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Production ref to build (main only)
+        required: false
+        type: string
+        default: main
 
 concurrency:
   group: pages
@@ -11,7 +20,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (inputs.ref == '' || inputs.ref == 'main')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,17 +30,61 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Record this public release
+        id: source
+        run: |
+          export RELEASE_SHA="$(git rev-parse HEAD)"
+          echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          node -e "require('node:fs').writeFileSync('public/release.json', JSON.stringify({revision:process.env.RELEASE_SHA,builtAt:new Date().toISOString(),source:'public snapshot only'}))"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
+      - name: Restore public attention classifier cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/public-attention.json
+          key: public-attention-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            public-attention-${{ runner.os }}-
       - run: npm ci
-      - run: npm test
-      - name: Record this public release
+      - name: Refresh public authored-PR attention hotset
+        run: npm run inbox:public-sync
+      - name: Enrich attention cache from GitHub notifications when configured
+        env:
+          GH_TOKEN: ${{ secrets.GH_INBOX_TOKEN }}
         run: |
-          node -e "require('node:fs').writeFileSync('public/release.json', JSON.stringify({revision:process.env.GITHUB_SHA,builtAt:new Date().toISOString(),source:'public snapshot only'}))"
-      - run: npm run build
+          if [ -n "$GH_TOKEN" ]; then
+            npm run inbox:sync
+          else
+            echo "GH_INBOX_TOKEN is optional; public attention data was refreshed without credentials."
+          fi
+      - id: unit
+        run: npm test
+      - id: build
+        run: npm run build
+      - id: dogfood
+        run: npm run dogfood:api
+      - name: Evaluate API and record aggregate metrics
+        if: always()
+        env:
+          EVAL_HEAD_SHA: ${{ steps.source.outputs.sha }}
+          EVAL_TEST_OUTCOME: ${{ steps.unit.outcome }}
+          EVAL_BUILD_OUTCOME: ${{ steps.build.outcome }}
+          EVAL_DOGFOOD_OUTCOME: ${{ steps.dogfood.outcome }}
+        run: npm run eval:api -- --require-export
+      - name: Retain API evaluation history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-evals-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .cache/api-evals/report.json
+            .cache/api-evals/summary.md
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static export
@@ -40,14 +93,13 @@ jobs:
           path: ./out
 
   deploy:
-    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write
     environment:
-      name: github-pages
+      name: archive-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "privacy": "public-safe",
+  "repo": "pingdotgg/t3code",
+  "number": 13967,
+  "contributions": [],
+  "attention": [
+    {
+      "repo": "pingdotgg/t3code",
+      "number": 13967,
+      "title": "fix(mobile): pin fbjni to React Native version",
+      "url": "https://github.com/pingdotgg/t3code/pull/13967",
+      "priority": "P0",
+      "blocker": "verification_requested",
+      "nextAction": "add the requested regression test against React Native's installed version catalog, run the focused checks, and reply with observed evidence",
+      "updatedAt": "2026-10-03T17:06:06Z",
+      "lastExternalAt": "2026-09-29T19:22:18Z",
+      "lastSelfAt": null,
+      "ciState": "none",
+      "reviewDecision": null,
+      "mergeState": null
+    }
+  ]
+}

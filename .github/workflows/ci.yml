@@ -5,6 +5,10 @@ on:
     branches: [main, preview, nightly, dev]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -20,8 +24,12 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run build
+      - id: unit
+        run: npm test
+      - id: build
+        run: npm run build
+      - id: dogfood
+        run: npm run dogfood:api
       - name: Verify static export contract
         run: |
           test -f out/index.html
@@ -29,3 +37,32 @@ jobs:
           test -f out/world-graph.json
           test -f out/data/archive.json
           test -f out/data/manifest.json
+          test -f out/api/v1/index.json
+          test -f out/api/v1/queues.json
+          test -f out/api/v1/recent.json
+          test -f out/api/v1/actors.json
+          test -f out/api/v1/semantic.json
+          test -f out/api/v1/changes.json
+          test -f out/api/v1/attention.json
+          test -f out/api/v1/contributions.json
+          test -f out/api/v1/repos.json
+          test -f out/api/v1/threads/pingdotgg/t3code/13967.json
+      - name: Evaluate API and record aggregate metrics
+        if: always()
+        env:
+          EVAL_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVAL_TEST_OUTCOME: ${{ steps.unit.outcome }}
+          EVAL_BUILD_OUTCOME: ${{ steps.build.outcome }}
+          EVAL_DOGFOOD_OUTCOME: ${{ steps.dogfood.outcome }}
+        run: npm run eval:api -- --require-export
+      - name: Retain API evaluation history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-evals-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .cache/api-evals/report.json
+            .cache/api-evals/summary.md
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 30
