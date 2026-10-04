@@ -23,7 +23,10 @@ import { filterSemanticGraph, readSemanticGraph, type PublicSemanticGraph } from
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
-export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility">;
+export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility"> & {
+  threadState?: "open" | "closed";
+  threadKind?: "issue" | "pull_request";
+};
 
 type PublicThreadEventSeedRow = {
   repo: string;
@@ -257,12 +260,15 @@ function safeRepoSegments(repo: string): [string, string] | null {
 function readAttentionSeed(attentionDbPath: string): {
   updatedAt: string | null;
   records: AttentionRecord[];
+  coverage: Record<string, unknown> | null;
 } {
   const seedPath = path.join(path.dirname(attentionDbPath), "attention-seed.json");
-  if (!fs.existsSync(seedPath)) return { updatedAt: null, records: [] };
+  if (!fs.existsSync(seedPath)) return { updatedAt: null, records: [], coverage: null };
   try {
     const parsed = JSON.parse(fs.readFileSync(seedPath, "utf8")) as {
+      source?: unknown;
       updatedAt?: unknown;
+      coverage?: unknown;
       items?: unknown;
     };
     const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
@@ -285,9 +291,15 @@ function readAttentionSeed(attentionDbPath: string): {
     return {
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
       records,
+      coverage:
+        parsed.source === "covered-public-inventory" &&
+        parsed.coverage &&
+        typeof parsed.coverage === "object"
+          ? (parsed.coverage as Record<string, unknown>)
+          : null,
     };
   } catch {
-    return { updatedAt: null, records: [] };
+    return { updatedAt: null, records: [], coverage: null };
   }
 }
 
@@ -322,8 +334,11 @@ function readPublicThreadEvents(attentionDbPath: string): PublicThreadEventSeedR
 function readPublicAttention(attentionDbPath: string): {
   updatedAt: string | null;
   records: AttentionRecord[];
+  coverage: Record<string, unknown> | null;
 } {
-  if (!fs.existsSync(attentionDbPath)) return readAttentionSeed(attentionDbPath);
+  const coveredSeed = readAttentionSeed(attentionDbPath);
+  if (coveredSeed.coverage) return coveredSeed;
+  if (!fs.existsSync(attentionDbPath)) return coveredSeed;
   let db: DatabaseSync | null = null;
   try {
     db = openAttentionDb(attentionDbPath);
@@ -337,6 +352,7 @@ function readPublicAttention(attentionDbPath: string): {
     return {
       updatedAt: readAttentionSyncedAt(db),
       records,
+      coverage: null,
     };
   } finally {
     db?.close();
@@ -399,9 +415,9 @@ function buildThreadResource(
     repo,
     number,
     identity: { repo, number },
-    title: root?.title ?? primaryAttention?.title ?? null,
-    url: root?.url ?? primaryAttention?.url ?? null,
-    state: root?.state ?? null,
+    title: primaryAttention?.title ?? root?.title ?? null,
+    url: primaryAttention?.url ?? root?.url ?? null,
+    state: primaryAttention?.threadState?.toUpperCase() ?? root?.state ?? null,
     updatedAt,
     derived,
     contributions,
