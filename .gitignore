@@ -44,6 +44,9 @@ data/*.db-wal
 data/*.db-shm
 data/*.db-journal
 
+# ephemeral persisted classifier cache
+.cache/
+
 # vercel
 .vercel
 

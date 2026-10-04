@@ -5,6 +5,10 @@ on:
     branches: [main, preview, nightly, dev]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -22,6 +26,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: npm run dogfood:api
       - name: Verify static export contract
         run: |
           test -f out/index.html
@@ -33,6 +38,7 @@ jobs:
           test -f out/api/v1/queues.json
           test -f out/api/v1/recent.json
           test -f out/api/v1/actors.json
+          test -f out/api/v1/changes.json
           test -f out/api/v1/attention.json
           test -f out/api/v1/contributions.json
           test -f out/api/v1/repos.json
