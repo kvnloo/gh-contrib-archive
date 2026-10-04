@@ -193,4 +193,96 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
   if (!Number.isInteger(recentDays) || recentDays < 1 || recentDays > 365) throw new RangeError('recentDays must be 1..365');
   const authored = await collectAuthored(reader, login, { now });
   const since = new Date(now - recentDays * 86400_000).toISOString().slice(0, 10);
-  const recent = await collectSearch(reader, `is:public involves:${logi
+  const recent = await collectSearch(reader, `is:public involves:${login} updated:>=${since}`, { now });
+  const byId = new Map(authored.items.map(row => [row.id, row]));
+  for (const row of recent.items) {
+    const old = byId.get(row.id);
+    if (!old || Date.parse(row.updatedAt) > Date.parse(old.updatedAt) || (row.updatedAt === old.updatedAt && row.state !== old.state)) byId.set(row.id, row);
+  }
+  const known = new Set([...byId.values()].map(row => row.repo.toLowerCase()));
+  const pinned = []; let unavailablePins = 0;
+  for (const repo of [...new Set(pins)]) {
+    if (!validRepo(repo)) throw new CollectionError('invalid_repo_pin');
+    // Positive public visibility is required even for a configured pin.
+    try {
+      const { data } = await reader.json(`/repos/${repo}`);
+      if (data.private !== false || data.visibility !== 'public' || !validRepo(data.full_name)) throw new CollectionError('pin_not_public');
+      known.add(data.full_name.toLowerCase());
+      const result = await collectSearch(reader, `is:public repo:${data.full_name} involves:${login} is:open`, { now });
+      pinned.push({ repo: data.full_name, coverage: result.coverage });
+      for (const row of result.items) byId.set(row.id, row);
+    } catch { unavailablePins++; }
+  }
+  const repositories = [...known].sort().map(repo => ({ repo, repoVisibility: 'public', reasons: [authored.items.some(r => r.repo.toLowerCase() === repo) ? 'open-authored-pr' : null,
+    recent.items.some(r => r.repo.toLowerCase() === repo) ? 'recent-involvement' : null, pinned.some(r => r.repo.toLowerCase() === repo) ? 'pin' : null].filter(Boolean) }));
+  return { items: [...byId.values()], repositories, coverage: { authored: authored.coverage, recent: recent.coverage, pinned,
+    unavailablePins, complete: authored.coverage.complete && recent.coverage.complete && unavailablePins === 0 && pinned.every(p => p.coverage.complete),
+    startedAt: new Date(now).toISOString(), recentSince: since, requests: reader.requests } };
+}
+/** Round-robin repos, oldest inspections first. New busy repos cannot starve older ones. */
+function fairRefresh(rows, cache, limit, now, ttlMs = 24 * 3600_000) {
+  if (!Number.isInteger(limit) || limit < 0 || limit > 1000 || !Number.isFinite(ttlMs) || ttlMs < 1) throw new RangeError('invalid refresh bounds');
+  const groups = new Map();
+  for (const row of rows) {
+    const c = cache[row.id];
+    if (c?.complete && c.sourceUpdatedAt === row.updatedAt && Number.isFinite(Date.parse(c.inspectedAt)) && now - Date.parse(c.inspectedAt) >= 0 && now - Date.parse(c.inspectedAt) < ttlMs) continue;
+    const group = groups.get(row.repo) ?? []; group.push(row); groups.set(row.repo, group);
+  }
+  const age = row => Date.parse(cache[row.id]?.inspectedAt ?? '') || 0;
+  for (const group of groups.values()) group.sort((a, b) => age(a) - age(b) || a.number - b.number);
+  const queues = [...groups.values()].sort((a, b) => age(a[0]) - age(b[0]) || a[0].repo.localeCompare(b[0].repo));
+  const result = [];
+  while (result.length < limit && queues.some(q => q.length)) for (const q of queues) { if (q.length && result.length < limit) result.push(q.shift()); }
+  return result;
+}
+
+const bot = login => /\[bot\]$/i.test(login ?? '') || ['github-actions', 'dependabot'].includes((login ?? '').toLowerCase());
+const REQUEST = /\b(please|could you|can you|must|required|missing|needs? (?:a |an )?(?:test|fix|rebase))\b/i;
+/** A later acknowledgement is not evidence that a maintainer's request was resolved. */
+function conservativeRecord(classify, root, feedback, login) {
+  const snapshot = { repo: root.repo, repoVisibility: 'public', number: root.number, title: root.title, url: root.url,
+    state: root.state.toUpperCase(), isDraft: root.draft, author: root.author, reviewDecision: root.reviewDecision,
+    mergeState: root.mergeState, updatedAt: root.updatedAt, notificationReasons: [], activities: feedback.activities, checks: [] };
+  const record = classify(snapshot, login);
+  record.threadState = root.state; record.threadKind = root.kind;
+  record.ciState = 'none'; // This collector has not inspected exact-head checks.
+  if (!feedback.complete) {
+    record.priority = 'P1'; record.blocker = 'inspection_pending';
+    record.nextAction = 'Feedback coverage is incomplete. Refresh this thread before concluding that no response or action is needed.';
+  } else {
+    const self = login.toLowerCase();
+    const requests = feedback.activities.filter(a => a.actor.toLowerCase() !== self && !bot(a.actor) && (a.reviewState === 'CHANGES_REQUESTED' || REQUEST.test(a.body)))
+      .sort((a, b) => b.at.localeCompare(a.at));
+    const latest = requests[0];
+    const laterApproval = latest && feedback.activities.some(a => a.actor === latest.actor && a.at > latest.at && ['APPROVED', 'DISMISSED'].includes(a.reviewState));
+    if (latest && !laterApproval && record.lastSelfAt && record.lastSelfAt > latest.at && record.priority === 'P2') {
+      record.priority = 'P1'; record.blocker = 'awaiting_rereview';
+      record.nextAction = 'The author replied after a human request; resolution has not been verified. Check the requested evidence or await re-review.';
+    }
+    if (record.blocker === 'approved') {
+      record.blocker = 'verification_pending';
+      record.nextAction = 'Review is approved, but current-head checks and mergeability still need verification.';
+    }
+    if (root.state === 'closed') {
+      record.priority = 'P2'; record.blocker = 'closed_thread';
+      record.nextAction = 'Historical context only. Do not treat this closed thread as an active promotion candidate.';
+    }
+  }
+  // Whitelist output even when a future classifier starts returning raw fields.
+  const allowed = ['repo', 'repoVisibility', 'number', 'title', 'url', 'priority', 'blocker', 'nextAction', 'updatedAt', 'lastExternalAt',
+    'latestExternalActor', 'latestExternalKind', 'latestExternalReviewState', 'lastSelfAt', 'ciState', 'reviewDecision', 'mergeState', 'threadState', 'threadKind'];
+  return Object.fromEntries(allowed.map(k => [k, record[k] ?? null]));
+}
+async function readFeedback(reader, root) {
+  const prefix = `/repos/${root.repo}`;
+  const sources = [['comment', `${prefix}/issues/${root.number}/comments?per_page=100`]];
+  if (root.kind === 'pull_request') sources.push(['review', `${prefix}/pulls/${root.number}/reviews?per_page=100`], ['review_comment', `${prefix}/pulls/${root.number}/comments?per_page=100`]);
+  const activities = [], events = [], ids = new Set();
+  try {
+    for (const [kind, url] of sources) for (const raw of await reader.collection(url)) {
+      const id = `${kind}:${raw.id}`;
+      if (!Number.isSafeInteger(raw.id) || raw.id < 1 || typeof raw.user?.login !== 'string' || raw.user.login.length > 64 || ids.has(id)) throw new CollectionError('invalid_feedback_record');
+      const at = kind === 'review' ? raw.submitted_at : raw.created_at;
+      if (!Number.isFinite(Date.parse(at))) throw new CollectionError('invalid_feedback_time');
+      ids.add(id);
+      activities.push({ actor: raw.user.login, body: String(raw.body ?
