@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { PUBLIC_DB_PATH, openDb } from "../lib/db.ts";
 import { nextDay, pageIsOlderThan, searchDay, splitDay, watermarkFrom } from "../lib/incremental.ts";
@@ -6,6 +7,29 @@ import { replaceCommitYearIfChanged, upsertContribution } from "../lib/increment
 const LOGIN = process.env.GH_LOGIN ?? "kvnloo";
 const TOKEN = process.env.GH_ARCHIVE_TOKEN ?? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
 const DB_PATH = process.env.ARCHIVE_DB ?? PUBLIC_DB_PATH;
+
+let contributionWrites = 0;
+let commitBucketYearsChanged = 0;
+
+function storageStats(db: DatabaseSync) {
+  const pageCount = Number(
+    (db.prepare("PRAGMA page_count").get() as { page_count: number }).page_count,
+  );
+  const pageSize = Number(
+    (db.prepare("PRAGMA page_size").get() as { page_size: number }).page_size,
+  );
+  const freePages = Number(
+    (db.prepare("PRAGMA freelist_count").get() as { freelist_count: number })
+      .freelist_count,
+  );
+  return {
+    bytes: fs.statSync(DB_PATH).size,
+    pageCount,
+    pageSize,
+    freePages,
+    logicalBytes: pageCount * pageSize,
+  };
+}
 
 if (!TOKEN) {
   console.error("GH_ARCHIVE_TOKEN or GH_TOKEN is required");
@@ -83,7 +107,7 @@ async function searchIssues(db: DatabaseSync, query: string, type: "pull_request
       if (!node?.id) continue;
       if (type === "pull_request" && node.__typename !== "PullRequest") continue;
       if (type === "issue" && node.__typename !== "Issue") continue;
-      upsertContribution(db, {
+      contributionWrites += Number(upsertContribution(db, {
         id: node.id,
         type,
         url: node.url,
@@ -95,7 +119,7 @@ async function searchIssues(db: DatabaseSync, query: string, type: "pull_request
         created_at: node.createdAt,
         updated_at: node.updatedAt,
         isPrivate: isPrivateRepo(node.repository),
-      });
+      }));
       written += 1;
     }
     console.log(`${type} search page ${page}: ${written}`);
@@ -172,7 +196,7 @@ async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
     const conn = json.data.user.issueComments;
     for (const node of conn.nodes) {
       if (pageIsOlderThan([node.updatedAt], watermark)) continue;
-      upsertContribution(db, {
+      contributionWrites += Number(upsertContribution(db, {
         id: node.id,
         type: "comment",
         url: node.url,
@@ -184,7 +208,7 @@ async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
         updated_at: node.updatedAt,
         extra: { parentUrl: node.issue?.url },
         isPrivate: isPrivateRepo(node.repository),
-      });
+      }));
     }
     const oldest = conn.nodes.at(-1)?.updatedAt ?? "none";
     console.log(`comments page ${page}: ${conn.nodes.length} oldest ${oldest}`);
@@ -261,7 +285,7 @@ async function ingestReviewsSince(db: DatabaseSync, day: string) {
       for (const review of pr.reviews.nodes) {
         if (review.author?.login !== LOGIN) continue;
         if (review.body?.trim()) {
-          upsertContribution(db, {
+          contributionWrites += Number(upsertContribution(db, {
             id: review.id,
             type: "review",
             url: review.url,
@@ -273,11 +297,11 @@ async function ingestReviewsSince(db: DatabaseSync, day: string) {
             created_at: review.submittedAt ?? new Date().toISOString(),
             extra: { prUrl: pr.url },
             isPrivate: hidden,
-          });
+          }));
         }
         for (const comment of review.comments.nodes) {
           if (comment.author?.login !== LOGIN) continue;
-          upsertContribution(db, {
+          contributionWrites += Number(upsertContribution(db, {
             id: comment.id,
             type: "review_comment",
             url: comment.url,
@@ -288,7 +312,7 @@ async function ingestReviewsSince(db: DatabaseSync, day: string) {
             created_at: comment.createdAt,
             extra: { prUrl: pr.url, reviewUrl: review.url },
             isPrivate: hidden,
-          });
+          }));
         }
       }
     }
@@ -344,6 +368,7 @@ async function refreshCommitYear(db: DatabaseSync, year: number) {
     privateCommits,
     LOGIN,
   );
+  if (changed) commitBucketYearsChanged += 1;
   console.log(
     `commits ${year}: ${publicRows.length} public repos, private count ${privateCommits}, changed=${changed}`,
   );
@@ -351,6 +376,7 @@ async function refreshCommitYear(db: DatabaseSync, year: number) {
 
 async function main() {
   const db = openDb(DB_PATH);
+  const storageBefore = storageStats(db);
   const before = db.prepare("SELECT COUNT(*) AS n FROM contributions").get() as { n: number };
   if (before.n < 1) throw new Error("public.db is empty; refusing a full historical ingest");
   const mark = db
@@ -379,7 +405,19 @@ async function main() {
   db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)").run("incremental_from", watermark);
   db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)").run("finished_at", new Date().toISOString());
   db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  const storageAfter = storageStats(db);
   console.log(`public.db ${before.n} -> ${after.n}`);
+  console.log(
+    JSON.stringify({
+      storage: {
+        before: storageBefore,
+        after: storageAfter,
+        deltaBytes: storageAfter.bytes - storageBefore.bytes,
+        contributionWrites,
+        commitBucketYearsChanged,
+      },
+    }),
+  );
   db.close();
 }
 
