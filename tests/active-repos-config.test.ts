@@ -20,15 +20,17 @@ test("active repository pins are bounded, unique, and public-safe identifiers", 
   assert.ok(config.pins.includes("pingdotgg/t3code"));
 });
 
-test("already-observed pins do not spend redundant visibility/search reads", () => {
+test("observed pins reuse visibility but still scan quiet open work", () => {
   const collector = fs.readFileSync("scripts/public-attention-sync.ts", "utf8");
   const start = collector.indexOf("for (const repo of [...new Set(pins)])");
   const end = collector.indexOf("const repositories =", start);
   assert.ok(start >= 0 && end > start);
   const pinLoop = collector.slice(start, end);
-  const reuse = pinLoop.indexOf("known.has(repo.toLowerCase())");
+  const known = pinLoop.indexOf("known.has(repo.toLowerCase())");
   const visibilityRead = pinLoop.indexOf("reader.json(\`/repos/\${repo}\`)");
-  assert.ok(reuse >= 0);
-  assert.ok(visibilityRead > reuse);
-  assert.match(pinLoop, /source: 'already-observed-public'/);
+  const openScan = pinLoop.indexOf("involves:\${login} is:open");
+  assert.ok(known >= 0);
+  assert.ok(visibilityRead > known);
+  assert.ok(openScan > known);
+  assert.match(pinLoop, /quiet older open work/);
 });
