@@ -761,6 +761,7 @@ export function compilePublicApi(
       archiveUpdatedAt: snapshot.manifest.lastCheckedAt,
       attentionUpdatedAt: attentionState.updatedAt,
     },
+    coverage,
     endpoints,
     resources,
     cache,
