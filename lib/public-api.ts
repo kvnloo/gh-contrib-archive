@@ -465,6 +465,7 @@ export function compilePublicApi(
     checksComplete: false,
     activeRepos: [],
   };
+  const revisionCoverage = { ...coverage, observedAt: null };
   const threadEventRows = readPublicThreadEvents(attentionDbPath);
   const legacyEvents = readThreadEventsSeed(
     path.join(path.dirname(attentionDbPath), "thread-events-seed.json"),
