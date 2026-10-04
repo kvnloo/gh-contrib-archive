@@ -53,6 +53,15 @@ export type PublicApiIndex = {
     archiveUpdatedAt: string;
     attentionUpdatedAt: string | null;
   };
+  coverage: {
+    source: "covered-public-inventory" | "legacy";
+    observedAt: string | null;
+    recentSince: string | null;
+    inventoryComplete: boolean;
+    feedbackComplete: boolean;
+    checksComplete: false;
+    activeRepos: string[];
+  };
   endpoints: {
     index: string;
     changes: string;
