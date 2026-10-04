@@ -3,6 +3,7 @@
 import { WorldChrome } from "@/components/worlds/WorldChrome";
 import { useWorldGraph, type Graph } from "@/components/worlds/useWorldGraph";
 import { publicAssetPath } from "@/lib/public-path";
+import { isSceneCaptureMode, sceneCaptureTime } from "@/lib/visual-capture";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -343,14 +344,14 @@ function buildStreamDetail(
 
 type Tooltip = { x: number; y: number; item: PublicItem } | null;
 
-function MyceliumCanvas({ graph }: { graph: Graph }) {
+function MyceliumCanvas({ graph, captureMode }: { graph: Graph; captureMode: boolean }) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const playingRef = useRef(true);
-  const [playing, setPlaying] = useState(true);
+  const playingRef = useRef(!captureMode);
+  const [playing, setPlaying] = useState(!captureMode);
   const [fps, setFps] = useState(60);
   const [tooltip, setTooltip] = useState<Tooltip>(null);
-  const [autoCam, setAutoCam] = useState(true);
-  const autoCamRef = useRef(true);
+  const [autoCam, setAutoCam] = useState(!captureMode);
+  const autoCamRef = useRef(!captureMode);
 
   const stats = useMemo(() => {
     const nodes = graph.nodes as GraphNode[];
@@ -362,7 +363,16 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
       else priv++;
     }
     return { pub, priv, repos: graph.repos?.length ?? 0 };
-  }, [graph]);
+  }, [graph, captureMode]);
+
+  useEffect(() => {
+    if (!captureMode) return;
+    playingRef.current = false;
+    autoCamRef.current = false;
+    setPlaying(false);
+    setAutoCam(false);
+    setTooltip(null);
+  }, [captureMode]);
 
   const togglePlay = useCallback(() => {
     setPlaying((p) => {
@@ -688,8 +698,9 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
 
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      const dt = Math.min(clock.getDelta(), 0.05);
-      const t = clock.elapsedTime;
+      const rawDt = Math.min(clock.getDelta(), 0.05);
+      const dt = captureMode ? 0 : rawDt;
+      const t = sceneCaptureTime(captureMode, clock.elapsedTime);
       uniforms.uTime.value = t;
       grade.uniforms.uTime.value = t;
       if (playingRef.current) flowTime += dt;
@@ -740,7 +751,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
         light.intensity = colonyBase[i] * (0.78 + 0.22 * Math.sin(t * 0.6 + i * 1.7));
       });
 
-      if (autoCamRef.current) {
+      if (!captureMode && autoCamRef.current) {
         // Slow handheld drift down the ravine.
         const breath = Math.sin(t * 0.11);
         camera.position.set(
@@ -810,7 +821,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
     <>
       <div ref={mountRef} className="absolute inset-0" />
 
-      {tooltip ? (
+      {!captureMode && tooltip ? (
         <div
           className="pointer-events-none fixed z-30 max-w-xs -translate-y-full rounded-md border border-teal-400/25 bg-black/70 px-3 py-2 backdrop-blur"
           style={{ left: tooltip.x + 12, top: tooltip.y - 8 }}
@@ -826,7 +837,7 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-end justify-between gap-3 p-4">
+      {!captureMode ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-wrap items-end justify-between gap-3 p-4">
         <div className="pointer-events-auto flex gap-2">
           <button
             type="button"
@@ -853,18 +864,23 @@ function MyceliumCanvas({ graph }: { graph: Graph }) {
             WebGL · {fps} FPS
           </p>
         </div>
-      </div>
+      </div> : null}
     </>
   );
 }
 
 export default function MyceliumScene() {
   const graph = useWorldGraph();
+  const [captureMode, setCaptureMode] = useState(false);
+
+  useEffect(() => {
+    setCaptureMode(isSceneCaptureMode(window.location.search));
+  }, []);
   return (
     <WorldChrome title="Mycelium">
       <div className="absolute inset-0 bg-[#02070a]">
         {graph ? (
-          <MyceliumCanvas graph={graph} />
+          <MyceliumCanvas graph={graph} captureMode={captureMode} />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-zinc-500">
             Loading public-safe graph…

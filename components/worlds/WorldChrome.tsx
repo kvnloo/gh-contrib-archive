@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { WORLDS } from "@/components/worlds/catalog";
+import { isSceneCaptureMode } from "@/lib/visual-capture";
 import {
   adjacentWorldId,
   worldIdForSwipe,
@@ -14,7 +15,12 @@ export function WorldChrome({ children, title }: { children: React.ReactNode; ti
   const path = usePathname();
   const router = useRouter();
   const touchStartX = useRef<number | null>(null);
+  const [captureMode, setCaptureMode] = useState(false);
   const currentWorld = WORLDS.find((world) => path.endsWith(`/${world.id}`)) ?? WORLDS[0];
+
+  useEffect(() => {
+    setCaptureMode(isSceneCaptureMode(window.location.search));
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -33,7 +39,7 @@ export function WorldChrome({ children, title }: { children: React.ReactNode; ti
     <div className="fixed inset-0 z-10 overflow-hidden bg-black text-zinc-100">
       {children}
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/80 via-black/45 to-transparent px-3 pb-8 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:p-4 sm:pb-10">
+      {!captureMode ? <div className="pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/80 via-black/45 to-transparent px-3 pb-8 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:p-4 sm:pb-10">
         <div className="pointer-events-auto flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[9px] uppercase tracking-[0.28em] text-zinc-500 sm:text-[10px]">
@@ -75,9 +81,9 @@ export function WorldChrome({ children, title }: { children: React.ReactNode; ti
             ledger
           </Link>
         </div>
-      </div>
+      </div> : null}
 
-      <nav
+      {!captureMode ? <nav
         aria-label="Mobile world navigation"
         className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-2 border-t border-white/10 bg-black/70 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur-xl sm:hidden"
         onTouchStart={(event) => {
@@ -118,7 +124,7 @@ export function WorldChrome({ children, title }: { children: React.ReactNode; ti
         >
           ›
         </button>
-      </nav>
+      </nav> : null}
     </div>
   );
 }
