@@ -463,7 +463,7 @@ export function compilePublicApi(
     inventoryComplete: rawCoverage.complete === true,
     feedbackComplete: rawCoverage.feedbackComplete === true,
     checksComplete: false,
-    activeRepos: [],
+    activeRepos: [...new Set(attentionItems.map((item) => item.repo))].sort(),
   };
   const revisionCoverage = { ...coverage, observedAt: null };
   const threadEventRows = readPublicThreadEvents(attentionDbPath);
