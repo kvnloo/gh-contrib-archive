@@ -6,13 +6,14 @@ const deploy = readFileSync(new URL("../.github/workflows/deploy-pages.yml", imp
 const nightly = readFileSync(new URL("../.github/workflows/automerge-nightly.yml", import.meta.url), "utf8");
 
 describe("Pages deployment from main", () => {
-  it("refreshes and deploys the public API hourly from the default branch", () => {
+  it("refreshes, publishes a connector cache, and deploys hourly from the default branch", () => {
     assert.match(deploy, /branches:\s*\[main\]/);
     assert.match(deploy, /schedule:[\s\S]*cron:\s*"17 \* \* \* \*"/);
     assert.match(deploy, /workflow_dispatch:/);
     assert.doesNotMatch(deploy, /workflow_call:/);
     assert.match(deploy, /if:\s*github\.ref == 'refs\/heads\/main'/);
     assert.match(deploy, /actions\/checkout@v4[\s\S]*ref:\s*\$\{\{\s*github\.sha\s*\}\}/);
+    assert.match(deploy, /permissions:[\s\S]*contents:\s*write/);
     assert.match(deploy, /Restore public attention classifier cache/);
     assert.match(deploy, /npm run inbox:public-sync/);
     assert.match(deploy, /GH_INBOX_TOKEN/);
@@ -20,6 +21,7 @@ describe("Pages deployment from main", () => {
     assert.match(deploy, /run: npm run build/);
     assert.match(deploy, /run: npm run dogfood:api/);
     assert.match(deploy, /npm run eval:api -- --require-export/);
+    assert.match(deploy, /Publish connector-readable API snapshot[\s\S]*READ_CACHE_BRANCH:\s*read-cache[\s\S]*bash scripts\/publish-read-cache\.sh/);
     assert.match(deploy, /public\/release\.json/);
     assert.match(deploy, /actions\/configure-pages@v5/);
     assert.match(deploy, /actions\/upload-pages-artifact@v4/);

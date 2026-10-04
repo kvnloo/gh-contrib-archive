@@ -41,7 +41,8 @@ GitHub Pages is a materialized, public-safe read model:
 ```text
 GitHub public REST + optional notification credential
   -> sanitizer/projector
-  -> static versioned JSON
+  -> validated static JSON
+  -> Pages + connector-readable read-cache
   -> readers/agents
 ```
 
@@ -49,16 +50,22 @@ Key v1 resources include `index.json`, `bootstrap.json`, `attention.json`, `queu
 
 These are deliberately projected schemas, not arbitrary GitHub API passthrough.
 
+### ChatGPT / connector reads
+
+The validated API snapshot is mirrored after every successful refresh to the `read-cache` branch under `public/api/v1/`. Connector consumers should read `public/api/v1/bootstrap.json` at ref `read-cache`, then follow revision-bearing repo/thread pointers. `public/api/v1/connector-meta.json` binds the snapshot to the exact source commit and source generation time.
+
+The mirror copies JSON from `out/api/v1` only. It does not publish the private database, tokens, arbitrary build output, or raw feedback bodies.
+
 ## Freshness
 
-The production Pages workflow lives on the default `main` branch and runs:
+The production workflow lives on the default `main` branch and runs:
 - on pushes to `main`
 - hourly at minute 17
 - on manual dispatch
 
-Each run refreshes the public attention hotset, optionally enriches it using `GH_INBOX_TOKEN`, runs tests/build/API dogfood/evals, and only then deploys Pages. The incremental archive sync remains a separate daily workflow that updates committed `data/public.db`.
+Each run refreshes the public attention hotset, optionally enriches it using `GH_INBOX_TOKEN`, runs tests/build/API dogfood/evals, publishes the validated connector cache, and then deploys Pages. The incremental archive sync remains a separate daily workflow that updates committed `data/public.db`.
 
-Readers must inspect freshness/coverage metadata rather than assuming a successful old snapshot is current.
+Readers must inspect `connector-meta.json` plus API freshness/coverage metadata rather than assuming an old snapshot is current.
 
 ## Contribution attention inbox
 

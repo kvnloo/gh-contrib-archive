@@ -16,7 +16,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pages: read
     env:
       NEXT_PUBLIC_BASE_PATH: /gh-contrib-archive
@@ -75,6 +75,11 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 30
+      - name: Publish connector-readable API snapshot
+        env:
+          READ_CACHE_BRANCH: read-cache
+          READ_CACHE_SOURCE_SHA: ${{ github.sha }}
+        run: bash scripts/publish-read-cache.sh
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload static export
