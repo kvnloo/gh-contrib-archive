@@ -9,7 +9,7 @@ import {
 describe("semantic graph projection", () => {
   it("keeps only whitelisted GitNexus metadata, never source content", () => {
     const hit = projectGitNexusResult("example/repo", {
-      processes: [{ id: "p1", name: "CacheFlow", content: "SECRET SOURCE" }],
+      processes: [{ id: "p1", summary: "CacheFlow", content: "SECRET SOURCE" }],
       definitions: [{ id: "d1", name: "CachePolicy", content: "SECRET SOURCE" }],
       process_symbols: [
         {
