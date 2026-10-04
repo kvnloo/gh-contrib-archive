@@ -12,7 +12,7 @@ import {
   type PublicArchiveItem,
   type PublicArchive,
 } from "./public-snapshot.ts";
-import { contentRevision, prettyJsonBytes } from "./resource-revision.ts";
+import { contentRevision } from "./resource-revision.ts";
 import { readThreadEventsSeed, projectPublicThreadEvents, type PublicThreadEvent } from "./public-thread-events.ts";
 import { buildWorkQueues, type WorkQueueName } from "./work-queues.ts";
 import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
@@ -23,7 +23,10 @@ import { filterSemanticGraph, readSemanticGraph, type PublicSemanticGraph } from
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
-export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility">;
+export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility"> & {
+  threadState?: "open" | "closed";
+  threadKind?: "issue" | "pull_request";
+};
 
 type PublicThreadEventSeedRow = {
   repo: string;
@@ -49,6 +52,15 @@ export type PublicApiIndex = {
   sources: {
     archiveUpdatedAt: string;
     attentionUpdatedAt: string | null;
+  };
+  coverage: {
+    source: "covered-public-inventory" | "legacy";
+    observedAt: string | null;
+    recentSince: string | null;
+    inventoryComplete: boolean;
+    feedbackComplete: boolean;
+    checksComplete: false;
+    activeRepos: string[];
   };
   endpoints: {
     index: string;
@@ -88,6 +100,7 @@ export type PublicAttention = {
   revision: string;
   updatedAt: string | null;
   count: number;
+  coverage: PublicApiIndex["coverage"];
   items: PublicAttentionItem[];
 };
 
@@ -257,12 +270,15 @@ function safeRepoSegments(repo: string): [string, string] | null {
 function readAttentionSeed(attentionDbPath: string): {
   updatedAt: string | null;
   records: AttentionRecord[];
+  coverage: Record<string, unknown> | null;
 } {
   const seedPath = path.join(path.dirname(attentionDbPath), "attention-seed.json");
-  if (!fs.existsSync(seedPath)) return { updatedAt: null, records: [] };
+  if (!fs.existsSync(seedPath)) return { updatedAt: null, records: [], coverage: null };
   try {
     const parsed = JSON.parse(fs.readFileSync(seedPath, "utf8")) as {
+      source?: unknown;
       updatedAt?: unknown;
+      coverage?: unknown;
       items?: unknown;
     };
     const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
@@ -285,9 +301,15 @@ function readAttentionSeed(attentionDbPath: string): {
     return {
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
       records,
+      coverage:
+        parsed.source === "covered-public-inventory" &&
+        parsed.coverage &&
+        typeof parsed.coverage === "object"
+          ? (parsed.coverage as Record<string, unknown>)
+          : null,
     };
   } catch {
-    return { updatedAt: null, records: [] };
+    return { updatedAt: null, records: [], coverage: null };
   }
 }
 
@@ -322,8 +344,11 @@ function readPublicThreadEvents(attentionDbPath: string): PublicThreadEventSeedR
 function readPublicAttention(attentionDbPath: string): {
   updatedAt: string | null;
   records: AttentionRecord[];
+  coverage: Record<string, unknown> | null;
 } {
-  if (!fs.existsSync(attentionDbPath)) return readAttentionSeed(attentionDbPath);
+  const coveredSeed = readAttentionSeed(attentionDbPath);
+  if (coveredSeed.coverage) return coveredSeed;
+  if (!fs.existsSync(attentionDbPath)) return coveredSeed;
   let db: DatabaseSync | null = null;
   try {
     db = openAttentionDb(attentionDbPath);
@@ -337,6 +362,7 @@ function readPublicAttention(attentionDbPath: string): {
     return {
       updatedAt: readAttentionSyncedAt(db),
       records,
+      coverage: null,
     };
   } finally {
     db?.close();
@@ -352,7 +378,7 @@ function resourceDescriptor(
     href,
     revision: resource.revision,
     updatedAt,
-    bytes: prettyJsonBytes(resource),
+    bytes: Buffer.byteLength(JSON.stringify(resource) + "\n"),
   };
 }
 
@@ -399,9 +425,9 @@ function buildThreadResource(
     repo,
     number,
     identity: { repo, number },
-    title: root?.title ?? primaryAttention?.title ?? null,
-    url: root?.url ?? primaryAttention?.url ?? null,
-    state: root?.state ?? null,
+    title: primaryAttention?.title ?? root?.title ?? null,
+    url: primaryAttention?.url ?? root?.url ?? null,
+    state: primaryAttention?.threadState?.toUpperCase() ?? root?.state ?? null,
     updatedAt,
     derived,
     contributions,
@@ -427,6 +453,19 @@ export function compilePublicApi(
   const snapshot = compilePublicSnapshot(publicDbPath);
   const attentionState = readPublicAttention(attentionDbPath);
   const attentionItems = attentionState.records.map(publicAttentionItem);
+  const rawCoverage = attentionState.coverage ?? {};
+  const coverage: PublicApiIndex["coverage"] = {
+    source: attentionState.coverage ? "covered-public-inventory" : "legacy",
+    observedAt:
+      typeof rawCoverage.observedAt === "string" ? rawCoverage.observedAt : null,
+    recentSince:
+      typeof rawCoverage.recentSince === "string" ? rawCoverage.recentSince : null,
+    inventoryComplete: rawCoverage.complete === true,
+    feedbackComplete: rawCoverage.feedbackComplete === true,
+    checksComplete: false,
+    activeRepos: [...new Set(attentionItems.map((item) => item.repo))].sort(),
+  };
+  const revisionCoverage = { ...coverage, observedAt: null };
   const threadEventRows = readPublicThreadEvents(attentionDbPath);
   const legacyEvents = readThreadEventsSeed(
     path.join(path.dirname(attentionDbPath), "thread-events-seed.json"),
@@ -548,7 +587,7 @@ export function compilePublicApi(
       href: `repos/${owner}/${name}.json`,
       revision: repoResource.revision,
       updatedAt,
-      bytes: prettyJsonBytes(repoResource),
+      bytes: Buffer.byteLength(JSON.stringify(repoResource) + "\n"),
     });
   }
 
@@ -560,7 +599,7 @@ export function compilePublicApi(
   }
   const actorRows = actorState.rows.map((row) => {
     const resource = actorResources.get(row.login)!;
-    return { ...row, revision: resource.revision, bytes: prettyJsonBytes(resource) };
+    return { ...row, revision: resource.revision, bytes: Buffer.byteLength(JSON.stringify(resource) + "\n") };
   });
   const actorsBase = {
     schemaVersion: PUBLIC_API_SCHEMA,
@@ -607,6 +646,7 @@ export function compilePublicApi(
     ...attentionBase,
     revision: contentRevision(attentionBase),
     updatedAt: attentionState.updatedAt,
+    coverage,
   };
 
   const contributions: PublicContributions = {
@@ -701,6 +741,7 @@ export function compilePublicApi(
     schemaVersion: PUBLIC_API_SCHEMA,
     privacy: "public-safe" as const,
     kind: "github-materialized-read-api" as const,
+    coverage,
     endpoints,
     resources: Object.fromEntries(
       Object.entries(resources).map(([key, value]) => [
@@ -721,6 +762,7 @@ export function compilePublicApi(
       archiveUpdatedAt: snapshot.manifest.lastCheckedAt,
       attentionUpdatedAt: attentionState.updatedAt,
     },
+    coverage,
     endpoints,
     resources,
     cache,
@@ -755,7 +797,7 @@ export function writePublicApi(
 
   const writeJson = (file: string, value: unknown) => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(value, null, 2) + "\n", "utf8");
+    fs.writeFileSync(file, JSON.stringify(value) + "\n", "utf8");
   };
 
   writeJson(path.join(root, "index.json"), compiled.index);
