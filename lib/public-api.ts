@@ -640,13 +640,13 @@ export function compilePublicApi(
     schemaVersion: PUBLIC_API_SCHEMA,
     privacy: "public-safe" as const,
     count: attentionItems.length,
-    coverage,
     items: attentionItems,
   };
   const attention: PublicAttention = {
     ...attentionBase,
     revision: contentRevision(attentionBase),
     updatedAt: attentionState.updatedAt,
+    coverage,
   };
 
   const contributions: PublicContributions = {
