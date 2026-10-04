@@ -11,6 +11,8 @@ import {
   PUBLIC_ATTENTION_CLASSIFIER_VERSION,
   canReuseAttention,
   readAttentionCache,
+  projectAttentionEvents,
+  type AttentionCacheEvent,
   writeAttentionCache,
   type AttentionCacheEntry,
 } from "../lib/public-attention-cache.ts";
@@ -75,17 +77,34 @@ function activity(
   };
 }
 
-async function deepActivities(repo: string, number: number): Promise<AttentionActivity[]> {
+function publicThreadEvent(item: Json, kind: "comment" | "review", at: unknown, reviewState?: unknown): AttentionCacheEvent | null {
+  const actor = String(item.user?.login ?? "");
+  const timestamp = String(at ?? "");
+  const numericId = Number(item.id);
+  if (!actor || !timestamp || !Number.isFinite(numericId)) return null;
+  return {
+    id: `${kind}:${numericId}`, kind, actor, at: timestamp,
+    reviewState: reviewState == null ? null : String(reviewState),
+    url: typeof item.html_url === "string" && item.html_url.startsWith("https://github.com/") ? item.html_url : null,
+  };
+}
+
+async function deepActivities(repo: string, number: number): Promise<{ activities: AttentionActivity[]; events: AttentionCacheEvent[] }> {
   const [comments, reviews] = await Promise.all([
     githubJson(`${API}/repos/${repo}/issues/${number}/comments?per_page=100`) as Promise<Json[]>,
     githubJson(`${API}/repos/${repo}/pulls/${number}/reviews?per_page=100`) as Promise<Json[]>,
   ]);
-  return [
+  const activities = [
     ...comments.map((item) => activity(item.user, item.body, item.created_at, "comment")),
     ...reviews.map((item) =>
       activity(item.user, item.body, item.submitted_at, "review", item.state),
     ),
   ].filter(Boolean) as AttentionActivity[];
+  const events = projectAttentionEvents([
+    ...comments.map((item) => publicThreadEvent(item, "comment", item.created_at)),
+    ...reviews.map((item) => publicThreadEvent(item, "review", item.submitted_at, item.state)),
+  ]);
+  return { activities, events };
 }
 
 function snapshotFromSearch(
@@ -152,6 +171,7 @@ async function main() {
     ) {
       return {
         record: cached.record,
+        events: cached.events,
         depth: cached.depth,
         reused: true,
         deepInspected: false,
@@ -161,11 +181,14 @@ async function main() {
     }
 
     let activities: AttentionActivity[] = [];
+    let events: AttentionCacheEvent[] = [];
     let depth: AttentionCacheEntry["depth"] = "shallow";
     let deepInspected = false;
     if (deepKeys.has(key)) {
       try {
-        activities = await deepActivities(repo, Number(item.number));
+        const deep = await deepActivities(repo, Number(item.number));
+        activities = deep.activities;
+        events = deep.events;
         depth = "deep";
         deepInspected = true;
       } catch (error) {
@@ -176,6 +199,7 @@ async function main() {
     }
     return {
       record: classifyPullRequest(snapshotFromSearch(item, repo, activities), login),
+      events,
       depth,
       reused: false,
       deepInspected,
@@ -192,10 +216,14 @@ async function main() {
       sourceUpdatedAt: item.sourceUpdatedAt,
       depth: item.depth,
       record: item.record,
+      events: item.events,
     });
   }
   writeAttentionCache(cachePath, nextCache, now);
 
+  const threads = inspected.filter((item) => item.events.length > 0).map(({ record, events }) => ({
+    repo: record.repo, repoVisibility: "public" as const, number: record.number, events,
+  }));
   const records = inspected.map(({ record }) => record);
   const deepInspected = inspected.filter((item) => item.deepInspected).length;
   const cacheHits = inspected.filter((item) => item.reused).length;
@@ -216,6 +244,7 @@ async function main() {
     concurrency,
     requestCount,
     items: sorted,
+    threads,
   };
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });

@@ -12,15 +12,41 @@ import {
   type PublicArchiveItem,
   type PublicArchive,
 } from "./public-snapshot.ts";
+import { contentRevision, prettyJsonBytes } from "./resource-revision.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
 export type PublicAttentionItem = Omit<AttentionRecord, "repoVisibility">;
 
+export type PublicThreadEvent = {
+  id: string;
+  kind: "comment" | "review";
+  actor: string;
+  at: string;
+  reviewState: string | null;
+  url: string | null;
+};
+
+type PublicThreadEventSeedRow = {
+  repo: string;
+  number: number;
+  events: PublicThreadEvent[];
+};
+
+type PublicContribution = Extract<PublicArchiveItem, { visibility: "public" }>;
+
+export type PublicResourceDescriptor = {
+  href: string;
+  revision: string;
+  updatedAt: string | null;
+  bytes: number;
+};
+
 export type PublicApiIndex = {
   schemaVersion: typeof PUBLIC_API_SCHEMA;
   privacy: "public-safe";
   kind: "github-materialized-read-api";
+  revision: string;
   generatedAt: string;
   sources: {
     archiveUpdatedAt: string;
@@ -28,11 +54,23 @@ export type PublicApiIndex = {
   };
   endpoints: {
     index: string;
+    changes: string;
     attention: string;
     contributions: string;
     repos: string;
     repo: string;
     thread: string;
+  };
+  resources: {
+    changes: PublicResourceDescriptor;
+    attention: PublicResourceDescriptor;
+    contributions: PublicResourceDescriptor;
+    repos: PublicResourceDescriptor;
+  };
+  cache: {
+    validation: "content-revision";
+    algorithm: "sha256-canonical-json";
+    flow: string[];
   };
   guarantees: string[];
 };
@@ -40,44 +78,103 @@ export type PublicApiIndex = {
 export type PublicAttention = {
   schemaVersion: typeof PUBLIC_API_SCHEMA;
   privacy: "public-safe";
+  revision: string;
   updatedAt: string | null;
   count: number;
   items: PublicAttentionItem[];
 };
 
+export type PublicContributions = PublicArchive & {
+  revision: string;
+};
+
+export type PublicThreadDescriptor = {
+  number: number;
+  href: string;
+  revision: string;
+  updatedAt: string | null;
+  priority: PublicAttentionItem["priority"] | null;
+};
+
 export type PublicRepoIndex = {
   schemaVersion: typeof PUBLIC_API_SCHEMA;
   privacy: "public-safe";
+  revision: string;
   count: number;
   repos: {
     repo: string;
     contributions: number;
     attention: number;
     href: string;
+    revision: string;
+    updatedAt: string | null;
+    bytes: number;
   }[];
 };
 
-type PublicRepoResource = {
+export type PublicRepoResource = {
   schemaVersion: typeof PUBLIC_API_SCHEMA;
   privacy: "public-safe";
+  kind: "repo-context";
+  revision: string;
   repo: string;
-  contributions: PublicArchiveItem[];
+  updatedAt: string | null;
+  contributions: PublicContribution[];
   attention: PublicAttentionItem[];
+  threads: PublicThreadDescriptor[];
 };
 
-type PublicThreadResource = {
+export type PublicThreadResource = {
   schemaVersion: typeof PUBLIC_API_SCHEMA;
   privacy: "public-safe";
+  kind: "thread-context";
+  revision: string;
   repo: string;
   number: number;
-  contributions: PublicArchiveItem[];
+  identity: { repo: string; number: number };
+  title: string | null;
+  url: string | null;
+  state: string | null;
+  updatedAt: string | null;
+  derived: null | {
+    priority: PublicAttentionItem["priority"];
+    blocker: string;
+    nextAction: string;
+    ciState: PublicAttentionItem["ciState"];
+    reviewDecision: string | null;
+    mergeState: string | null;
+    lastExternalAt: string | null;
+    lastSelfAt: string | null;
+  };
+  contributions: PublicContribution[];
   attention: PublicAttentionItem[];
+  events: PublicThreadEvent[];
+  evidenceRefs: string[];
+  links: {
+    self: string;
+    repo: string;
+  };
+};
+
+export type PublicChanges = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  kind: "resource-revision-manifest";
+  revision: string;
+  generatedAt: string;
+  resources: {
+    attention: PublicResourceDescriptor;
+    contributions: PublicResourceDescriptor;
+    repos: PublicResourceDescriptor;
+  };
+  repos: PublicRepoIndex["repos"];
 };
 
 export type CompiledPublicApi = {
   index: PublicApiIndex;
+  changes: PublicChanges;
   attention: PublicAttention;
-  contributions: PublicArchive;
+  contributions: PublicContributions;
   repos: PublicRepoIndex;
   repoResources: Map<string, PublicRepoResource>;
   threadResources: Map<string, PublicThreadResource>;
@@ -85,6 +182,13 @@ export type CompiledPublicApi = {
 
 function laterIso(a: string, b: string | null): string {
   return b && b > a ? b : a;
+}
+
+function latestIso(values: Array<string | null | undefined>): string | null {
+  const present = values.filter((value): value is string => typeof value === "string" && value.length > 0);
+  return present.length === 0
+    ? null
+    : present.reduce((latest, value) => (value > latest ? value : latest));
 }
 
 function publicAttentionItem(record: AttentionRecord): PublicAttentionItem {
@@ -137,6 +241,57 @@ function readAttentionSeed(attentionDbPath: string): {
   }
 }
 
+function readPublicThreadEvents(attentionDbPath: string): PublicThreadEventSeedRow[] {
+  const seedPath = path.join(path.dirname(attentionDbPath), "attention-seed.json");
+  if (!fs.existsSync(seedPath)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(seedPath, "utf8")) as { threads?: unknown };
+    if (!Array.isArray(parsed.threads)) return [];
+    const rows: PublicThreadEventSeedRow[] = [];
+    for (const raw of parsed.threads) {
+      if (!raw || typeof raw !== "object") continue;
+      const row = raw as Record<string, unknown>;
+      if (
+        row.repoVisibility !== "public" ||
+        typeof row.repo !== "string" ||
+        safeRepoSegments(row.repo) === null ||
+        typeof row.number !== "number" ||
+        !Array.isArray(row.events)
+      ) {
+        continue;
+      }
+      const events: PublicThreadEvent[] = [];
+      for (const rawEvent of row.events) {
+        if (!rawEvent || typeof rawEvent !== "object") continue;
+        const event = rawEvent as Record<string, unknown>;
+        if (
+          typeof event.id !== "string" ||
+          (event.kind !== "comment" && event.kind !== "review") ||
+          typeof event.actor !== "string" ||
+          typeof event.at !== "string"
+        ) {
+          continue;
+        }
+        events.push({
+          id: event.id,
+          kind: event.kind,
+          actor: event.actor,
+          at: event.at,
+          reviewState: typeof event.reviewState === "string" ? event.reviewState : null,
+          url:
+            typeof event.url === "string" && event.url.startsWith("https://github.com/")
+              ? event.url
+              : null,
+        });
+      }
+      if (events.length > 0) rows.push({ repo: row.repo, number: row.number, events });
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
 function readPublicAttention(attentionDbPath: string): {
   updatedAt: string | null;
   records: AttentionRecord[];
@@ -161,6 +316,81 @@ function readPublicAttention(attentionDbPath: string): {
   }
 }
 
+function resourceDescriptor(
+  href: string,
+  resource: { revision: string },
+  updatedAt: string | null,
+): PublicResourceDescriptor {
+  return {
+    href,
+    revision: resource.revision,
+    updatedAt,
+    bytes: prettyJsonBytes(resource),
+  };
+}
+
+function stableArchivePayload(archive: PublicArchive) {
+  const { generatedAt: _generatedAt, ...stable } = archive;
+  return stable;
+}
+
+function buildThreadResource(
+  repo: string,
+  number: number,
+  contributions: PublicContribution[],
+  attention: PublicAttentionItem[],
+  events: PublicThreadEvent[],
+): PublicThreadResource {
+  const [owner, name] = safeRepoSegments(repo)!;
+  const root = contributions.find((item) =>
+    ["pull_request", "issue", "discussion"].includes(item.type),
+  );
+  const primaryAttention = attention[0] ?? null;
+  const updatedAt = latestIso([
+    ...contributions.map((item) => item.updated_at ?? item.created_at),
+    ...attention.map((item) => item.updatedAt),
+    ...events.map((event) => event.at),
+  ]);
+  const derived = primaryAttention
+    ? {
+        priority: primaryAttention.priority,
+        blocker: primaryAttention.blocker,
+        nextAction: primaryAttention.nextAction,
+        ciState: primaryAttention.ciState,
+        reviewDecision: primaryAttention.reviewDecision,
+        mergeState: primaryAttention.mergeState,
+        lastExternalAt: primaryAttention.lastExternalAt,
+        lastSelfAt: primaryAttention.lastSelfAt,
+      }
+    : null;
+  const base = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe" as const,
+    kind: "thread-context" as const,
+    repo,
+    number,
+    identity: { repo, number },
+    title: root?.title ?? primaryAttention?.title ?? null,
+    url: root?.url ?? primaryAttention?.url ?? null,
+    state: root?.state ?? null,
+    updatedAt,
+    derived,
+    contributions,
+    attention,
+    events,
+    evidenceRefs: [
+      ...contributions.map((item) => item.id),
+      ...(primaryAttention ? [`attention:${repo}#${number}`] : []),
+      ...events.map((event) => event.id),
+    ],
+    links: {
+      self: `threads/${owner}/${name}/${number}.json`,
+      repo: `repos/${owner}/${name}.json`,
+    },
+  };
+  return { ...base, revision: contentRevision(base) };
+}
+
 export function compilePublicApi(
   publicDbPath: string,
   attentionDbPath: string,
@@ -168,13 +398,13 @@ export function compilePublicApi(
   const snapshot = compilePublicSnapshot(publicDbPath);
   const attentionState = readPublicAttention(attentionDbPath);
   const attentionItems = attentionState.records.map(publicAttentionItem);
+  const threadEventRows = readPublicThreadEvents(attentionDbPath);
 
   const publicItems = snapshot.archive.items.filter(
-    (item): item is Extract<PublicArchiveItem, { visibility: "public" }> =>
-      item.visibility === "public",
+    (item): item is PublicContribution => item.visibility === "public",
   );
 
-  const itemsByRepo = new Map<string, PublicArchiveItem[]>();
+  const itemsByRepo = new Map<string, PublicContribution[]>();
   for (const item of publicItems) {
     if (!item.repo || safeRepoSegments(item.repo) === null) continue;
     const list = itemsByRepo.get(item.repo) ?? [];
@@ -189,9 +419,17 @@ export function compilePublicApi(
     attentionByRepo.set(item.repo, list);
   }
 
+  const threadEventsByRepo = new Map<string, PublicThreadEventSeedRow[]>();
+  for (const row of threadEventRows) {
+    const list = threadEventsByRepo.get(row.repo) ?? [];
+    list.push(row);
+    threadEventsByRepo.set(row.repo, list);
+  }
+
   const repoNames = new Set<string>([
     ...itemsByRepo.keys(),
     ...attentionByRepo.keys(),
+    ...threadEventsByRepo.keys(),
   ]);
 
   const repoResources = new Map<string, PublicRepoResource>();
@@ -201,86 +439,195 @@ export function compilePublicApi(
   for (const repo of [...repoNames].sort()) {
     const contributions = itemsByRepo.get(repo) ?? [];
     const attention = attentionByRepo.get(repo) ?? [];
-    repoResources.set(repo, {
+    const threadEvents = threadEventsByRepo.get(repo) ?? [];
+    const [owner, name] = safeRepoSegments(repo)!;
+
+    const numbers = new Set<number>();
+    for (const item of contributions) {
+      if (item.number != null) numbers.add(item.number);
+    }
+    for (const item of attention) numbers.add(item.number);
+    for (const row of threadEvents) numbers.add(row.number);
+
+    const threads: PublicThreadDescriptor[] = [];
+    for (const number of [...numbers].sort((a, b) => a - b)) {
+      const resource = buildThreadResource(
+        repo,
+        number,
+        contributions.filter((item) => item.number === number),
+        attention.filter((item) => item.number === number),
+        threadEvents
+          .filter((row) => row.number === number)
+          .flatMap((row) => row.events)
+          .sort((a, b) => a.at.localeCompare(b.at)),
+      );
+      threadResources.set(`${repo}#${number}`, resource);
+      threads.push({
+        number,
+        href: resource.links.self,
+        revision: resource.revision,
+        updatedAt: resource.updatedAt,
+        priority: resource.derived?.priority ?? null,
+      });
+    }
+
+    const updatedAt = latestIso([
+      ...contributions.map((item) => item.updated_at ?? item.created_at),
+      ...attention.map((item) => item.updatedAt),
+    ]);
+    const repoBase = {
       schemaVersion: PUBLIC_API_SCHEMA,
-      privacy: "public-safe",
+      privacy: "public-safe" as const,
+      kind: "repo-context" as const,
       repo,
+      updatedAt,
       contributions,
       attention,
-    });
+      threads,
+    };
+    const repoResource: PublicRepoResource = {
+      ...repoBase,
+      revision: contentRevision(repoBase),
+    };
+    repoResources.set(repo, repoResource);
 
-    const [owner, name] = safeRepoSegments(repo)!;
     repoRows.push({
       repo,
       contributions: contributions.length,
       attention: attention.length,
       href: `repos/${owner}/${name}.json`,
+      revision: repoResource.revision,
+      updatedAt,
+      bytes: prettyJsonBytes(repoResource),
     });
-
-    const numbers = new Set<number>();
-    for (const item of contributions) {
-      if (item.visibility === "public" && item.number != null) numbers.add(item.number);
-    }
-    for (const item of attention) numbers.add(item.number);
-
-    for (const number of [...numbers].sort((a, b) => a - b)) {
-      threadResources.set(`${repo}#${number}`, {
-        schemaVersion: PUBLIC_API_SCHEMA,
-        privacy: "public-safe",
-        repo,
-        number,
-        contributions: contributions.filter(
-          (item) => item.visibility === "public" && item.number === number,
-        ),
-        attention: attention.filter((item) => item.number === number),
-      });
-    }
   }
 
-  const attention: PublicAttention = {
+  const attentionBase = {
     schemaVersion: PUBLIC_API_SCHEMA,
-    privacy: "public-safe",
-    updatedAt: attentionState.updatedAt,
+    privacy: "public-safe" as const,
     count: attentionItems.length,
     items: attentionItems,
   };
+  const attention: PublicAttention = {
+    ...attentionBase,
+    revision: contentRevision(attentionBase),
+    updatedAt: attentionState.updatedAt,
+  };
 
-  const repos: PublicRepoIndex = {
+  const contributions: PublicContributions = {
+    ...snapshot.archive,
+    revision: contentRevision(stableArchivePayload(snapshot.archive)),
+  };
+
+  const reposBase = {
     schemaVersion: PUBLIC_API_SCHEMA,
-    privacy: "public-safe",
+    privacy: "public-safe" as const,
     count: repoRows.length,
     repos: repoRows,
   };
+  const repos: PublicRepoIndex = {
+    ...reposBase,
+    revision: contentRevision(reposBase),
+  };
 
+  const generatedAt = laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt);
+  const coreResources = {
+    attention: resourceDescriptor("attention.json", attention, attentionState.updatedAt),
+    contributions: resourceDescriptor(
+      "contributions.json",
+      contributions,
+      snapshot.manifest.lastCheckedAt,
+    ),
+    repos: resourceDescriptor("repos.json", repos, generatedAt),
+  };
+  const changesBase = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe" as const,
+    kind: "resource-revision-manifest" as const,
+    generatedAt,
+    resources: coreResources,
+    repos: repoRows,
+  };
+  const changes: PublicChanges = {
+    ...changesBase,
+    revision: contentRevision({
+      ...changesBase,
+      generatedAt: undefined,
+      resources: Object.fromEntries(
+        Object.entries(coreResources).map(([key, value]) => [
+          key,
+          { href: value.href, revision: value.revision },
+        ]),
+      ),
+      repos: repoRows.map(({ repo, href, revision }) => ({ repo, href, revision })),
+    }),
+  };
+
+  const endpoints = {
+    index: "index.json",
+    changes: "changes.json",
+    attention: "attention.json",
+    contributions: "contributions.json",
+    repos: "repos.json",
+    repo: "repos/{owner}/{repo}.json",
+    thread: "threads/{owner}/{repo}/{number}.json",
+  };
+  const resources = {
+    changes: resourceDescriptor("changes.json", changes, generatedAt),
+    ...coreResources,
+  };
+  const cache = {
+    validation: "content-revision" as const,
+    algorithm: "sha256-canonical-json" as const,
+    flow: [
+      "fetch index.json",
+      "compare the desired resource revision with the locally cached revision",
+      "fetch only resources whose revision changed",
+      "descend from repos.json to repo context, then to thread context only when needed",
+    ],
+  };
+  const guarantees = [
+    "read-only static JSON",
+    "whitelisted projected schemas only",
+    "private and unknown repository identities excluded from repo/thread/attention endpoints",
+    "no GitHub credential or raw notification/review/comment body is published",
+    "resource revisions ignore collector-only freshness timestamps and change with public semantic payloads",
+  ];
+  const indexStable = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe" as const,
+    kind: "github-materialized-read-api" as const,
+    endpoints,
+    resources: Object.fromEntries(
+      Object.entries(resources).map(([key, value]) => [
+        key,
+        { href: value.href, revision: value.revision },
+      ]),
+    ),
+    cache,
+    guarantees,
+  };
   const index: PublicApiIndex = {
     schemaVersion: PUBLIC_API_SCHEMA,
     privacy: "public-safe",
     kind: "github-materialized-read-api",
-    generatedAt: laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt),
+    revision: contentRevision(indexStable),
+    generatedAt,
     sources: {
       archiveUpdatedAt: snapshot.manifest.lastCheckedAt,
       attentionUpdatedAt: attentionState.updatedAt,
     },
-    endpoints: {
-      index: "index.json",
-      attention: "attention.json",
-      contributions: "contributions.json",
-      repos: "repos.json",
-      repo: "repos/{owner}/{repo}.json",
-      thread: "threads/{owner}/{repo}/{number}.json",
-    },
-    guarantees: [
-      "read-only static JSON",
-      "whitelisted projected schemas only",
-      "private and unknown repository identities excluded from repo/thread/attention endpoints",
-      "no GitHub credential or raw notification/review/comment body is published",
-    ],
+    endpoints,
+    resources,
+    cache,
+    guarantees,
   };
 
   return {
     index,
+    changes,
     attention,
-    contributions: snapshot.archive,
+    contributions,
     repos,
     repoResources,
     threadResources,
@@ -303,6 +650,7 @@ export function writePublicApi(
   };
 
   writeJson(path.join(root, "index.json"), compiled.index);
+  writeJson(path.join(root, "changes.json"), compiled.changes);
   writeJson(path.join(root, "attention.json"), compiled.attention);
   writeJson(path.join(root, "contributions.json"), compiled.contributions);
   writeJson(path.join(root, "repos.json"), compiled.repos);
