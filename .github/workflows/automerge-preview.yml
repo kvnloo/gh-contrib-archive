@@ -8,6 +8,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  pages: write
+  id-token: write
 
 jobs:
   automerge:
@@ -29,3 +31,9 @@ jobs:
           else
             echo "scheme forbids preview automerge"
           fi
+
+  promote:
+    needs: automerge
+    if: needs.automerge.result == 'success'
+    uses: ./.github/workflows/promote-preview.yml
+    secrets: inherit
