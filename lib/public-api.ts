@@ -796,7 +796,7 @@ export function writePublicApi(
 
   const writeJson = (file: string, value: unknown) => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(value, null, 2) + "\n", "utf8");
+    fs.writeFileSync(file, JSON.stringify(value) + "\n", "utf8");
   };
 
   writeJson(path.join(root, "index.json"), compiled.index);
