@@ -28,25 +28,20 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - name: Restore public attention classifier cache
+      - name: Restore bounded covered-inbox cache
         uses: actions/cache@v4
         with:
-          path: .cache/public-attention.json
-          key: public-attention-${{ runner.os }}-${{ github.run_id }}
+          path: .cache/covered-attention.json
+          key: covered-attention-v1-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            public-attention-${{ runner.os }}-
+            covered-attention-v1-${{ runner.os }}-
       - run: npm ci
-      - name: Refresh public authored-PR attention hotset
-        run: npm run inbox:public-sync
-      - name: Enrich attention cache from GitHub notifications when configured
+      - name: Refresh complete public work inventory
         env:
-          GH_TOKEN: ${{ secrets.GH_INBOX_TOKEN }}
-        run: |
-          if [ -n "$GH_TOKEN" ]; then
-            npm run inbox:sync
-          else
-            echo "GH_INBOX_TOKEN is optional; public attention data was refreshed without credentials."
-          fi
+          GITHUB_TOKEN: ${{ secrets.GH_INBOX_TOKEN || github.token }}
+          PUBLIC_READ_REQUEST_LIMIT: "220"
+          PUBLIC_ATTENTION_DEEP_LIMIT: "48"
+        run: npm run inbox:public-sync
       - id: unit
         run: npm test
       - name: Record this public release
@@ -54,6 +49,27 @@ jobs:
           node -e "require('node:fs').writeFileSync('public/release.json', JSON.stringify({revision:process.env.GITHUB_SHA,builtAt:new Date().toISOString(),source:'public snapshot only'}))"
       - id: build
         run: npm run build
+      - name: Verify covered inbox before publication
+        run: |
+          node --input-type=module - <<'NODE'
+          import fs from "node:fs";
+          const root = "out/api/v1";
+          const read = (name) => JSON.parse(fs.readFileSync(`${root}/${name}`, "utf8"));
+          const index = read("index.json");
+          const attention = read("attention.json");
+          if (index.coverage?.source !== "covered-public-inventory") throw new Error("covered collector not authoritative");
+          if (index.coverage?.inventoryComplete !== true) throw new Error("inventory is incomplete; refusing publication");
+          if (attention.coverage?.inventoryComplete !== true) throw new Error("attention coverage is incomplete");
+          const gev = `${root}/repos/bilawalsidhu/gods-eye-view.json`;
+          if (!fs.existsSync(gev)) throw new Error("GEV is missing from covered repository materialization");
+          const repo = JSON.parse(fs.readFileSync(gev, "utf8"));
+          if (!Array.isArray(repo.attention) || repo.attention.length < 1) throw new Error("GEV inbox has no current work rows");
+          console.log(JSON.stringify({
+            coveredRepos: index.coverage.activeRepos?.length ?? null,
+            attentionRows: attention.count,
+            gevRows: repo.attention.length,
+          }));
+          NODE
       - id: dogfood
         run: npm run dogfood:api
       - name: Evaluate API and record aggregate metrics
@@ -101,3 +117,31 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify deployed covered inbox
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request
+          base = os.environ["PAGE_URL"].rstrip("/")
+          error = None
+          for _ in range(12):
+              try:
+                  with urllib.request.urlopen(base + "/api/v1/index.json", timeout=10) as r:
+                      index = json.load(r)
+                  with urllib.request.urlopen(base + "/api/v1/repos/bilawalsidhu/gods-eye-view.json", timeout=10) as r:
+                      gev = json.load(r)
+                  if index.get("coverage", {}).get("source") != "covered-public-inventory":
+                      raise RuntimeError("deployed index is not the covered collector")
+                  if index.get("coverage", {}).get("inventoryComplete") is not True:
+                      raise RuntimeError("deployed inventory is incomplete")
+                  if not gev.get("attention"):
+                      raise RuntimeError("deployed GEV inbox is empty")
+                  print(json.dumps({"revision": index.get("revision"), "gevRows": len(gev["attention"])}))
+                  break
+              except Exception as exc:
+                  error = exc
+                  time.sleep(10)
+          else:
+              raise SystemExit(f"deployed verification failed: {error}")
+          PY
