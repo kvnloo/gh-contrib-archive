@@ -17,6 +17,7 @@ import { readThreadEventsSeed, projectPublicThreadEvents, type PublicThreadEvent
 import { buildWorkQueues, type WorkQueueName } from "./work-queues.ts";
 import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
 export type { PublicThreadEvent } from "./public-thread-events.ts";
+import { actorHref, buildActorIndex, type PublicActorIndexRow, type PublicActorResource } from "./actor-index.ts";
 
 export const PUBLIC_API_SCHEMA = 1 as const;
 
@@ -50,6 +51,8 @@ export type PublicApiIndex = {
   endpoints: {
     index: string;
     changes: string;
+    actors: string;
+    actor: string;
     queues: string;
     recent: string;
     attention: string;
@@ -60,6 +63,7 @@ export type PublicApiIndex = {
   };
   resources: {
     changes: PublicResourceDescriptor;
+    actors: PublicResourceDescriptor;
     queues: PublicResourceDescriptor;
     recent: PublicResourceDescriptor;
     attention: PublicResourceDescriptor;
@@ -99,6 +103,20 @@ export type PublicRecentThreads = {
   generatedAt: string;
   count: number;
   items: RecentThread[];
+};
+
+export type PublicActorContext = PublicActorResource & {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  revision: string;
+};
+
+export type PublicActors = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  revision: string;
+  count: number;
+  actors: Array<PublicActorIndexRow & { revision: string; bytes: number }>;
 };
 
 export type PublicContributions = PublicArchive & {
@@ -182,6 +200,7 @@ export type PublicChanges = {
   revision: string;
   generatedAt: string;
   resources: {
+    actors: PublicResourceDescriptor;
     queues: PublicResourceDescriptor;
     recent: PublicResourceDescriptor;
     attention: PublicResourceDescriptor;
@@ -194,6 +213,8 @@ export type PublicChanges = {
 export type CompiledPublicApi = {
   index: PublicApiIndex;
   changes: PublicChanges;
+  actors: PublicActors;
+  actorResources: Map<string, PublicActorContext>;
   queues: PublicWorkQueues;
   recent: PublicRecentThreads;
   attention: PublicAttention;
@@ -515,6 +536,24 @@ export function compilePublicApi(
     });
   }
 
+  const actorState = buildActorIndex([...threadResources.values()]);
+  const actorResources = new Map<string, PublicActorContext>();
+  for (const [login, resource] of actorState.resources) {
+    const base = { schemaVersion: PUBLIC_API_SCHEMA, privacy: "public-safe" as const, ...resource };
+    actorResources.set(login, { ...base, revision: contentRevision(base) });
+  }
+  const actorRows = actorState.rows.map((row) => {
+    const resource = actorResources.get(row.login)!;
+    return { ...row, revision: resource.revision, bytes: prettyJsonBytes(resource) };
+  });
+  const actorsBase = {
+    schemaVersion: PUBLIC_API_SCHEMA,
+    privacy: "public-safe" as const,
+    count: actorRows.length,
+    actors: actorRows,
+  };
+  const actors: PublicActors = { ...actorsBase, revision: contentRevision(actorsBase) };
+
   const groupedQueues = buildWorkQueues(attentionItems);
   const queuesBase = {
     schemaVersion: PUBLIC_API_SCHEMA,
@@ -572,6 +611,7 @@ export function compilePublicApi(
 
   const generatedAt = laterIso(snapshot.manifest.lastCheckedAt, attentionState.updatedAt);
   const coreResources = {
+    actors: resourceDescriptor("actors.json", actors, latestIso(actorRows.map((actor) => actor.lastSeenAt))),
     queues: resourceDescriptor("queues.json", queues, attentionState.updatedAt),
     recent: resourceDescriptor("recent.json", recent, generatedAt),
     attention: resourceDescriptor("attention.json", attention, attentionState.updatedAt),
@@ -608,6 +648,8 @@ export function compilePublicApi(
   const endpoints = {
     index: "index.json",
     changes: "changes.json",
+    actors: "actors.json",
+    actor: "actors/{login}.json",
     queues: "queues.json",
     recent: "recent.json",
     attention: "attention.json",
@@ -670,6 +712,8 @@ export function compilePublicApi(
   return {
     index,
     changes,
+    actors,
+    actorResources,
     queues,
     recent,
     attention,
@@ -697,6 +741,10 @@ export function writePublicApi(
 
   writeJson(path.join(root, "index.json"), compiled.index);
   writeJson(path.join(root, "changes.json"), compiled.changes);
+  writeJson(path.join(root, "actors.json"), compiled.actors);
+  for (const [login, resource] of compiled.actorResources) {
+    writeJson(path.join(root, actorHref(login)), resource);
+  }
   writeJson(path.join(root, "queues.json"), compiled.queues);
   writeJson(path.join(root, "recent.json"), compiled.recent);
   writeJson(path.join(root, "attention.json"), compiled.attention);
