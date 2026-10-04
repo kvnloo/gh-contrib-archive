@@ -285,4 +285,81 @@ async function readFeedback(reader, root) {
       const at = kind === 'review' ? raw.submitted_at : raw.created_at;
       if (!Number.isFinite(Date.parse(at))) throw new CollectionError('invalid_feedback_time');
       ids.add(id);
-      activities.push({ actor: raw.user.login, body: String(raw.body ?
+      activities.push({ actor: raw.user.login, body: String(raw.body ?? ''), at, kind: kind === 'review' ? 'review' : 'comment', reviewState: raw.state ?? null });
+      const u = new URL(raw.html_url ?? root.url);
+      const expected = `/${root.repo}/${root.kind === 'pull_request' ? 'pull' : 'issues'}/${root.number}`;
+      const safeUrl = u.origin === 'https://github.com' && !u.username && !u.password && !u.search && u.pathname === expected ? u.href : root.url;
+      events.push({ id, kind: kind === 'review' ? 'review' : 'comment', actor: raw.user.login, at,
+        actorType: ['User', 'Bot', 'Organization', 'Mannequin'].includes(raw.user.type) ? raw.user.type : null,
+        authorAssociation: ['COLLABORATOR', 'CONTRIBUTOR', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'MANNEQUIN', 'MEMBER', 'NONE', 'OWNER'].includes(raw.author_association) ? raw.author_association : null,
+        reviewState: typeof raw.state === 'string' ? raw.state : null, url: safeUrl });
+    }
+    return { complete: true, activities, events: events.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)), reason: null };
+  } catch (e) { return { complete: false, activities, events, reason: e instanceof CollectionError ? e.code : 'feedback_failed' }; }
+}
+async function materializeAttention(reader, work, { classify, sort = rows => rows, login = 'kvnloo', cache = {}, now = Date.now(), deepLimit = 48, ttlMs = 24 * 3600_000, eventLimit = 64, maxCacheBytes = 16 * 1024 * 1024 } = {}) {
+  if (!Number.isSafeInteger(maxCacheBytes) || maxCacheBytes < 1024) throw new RangeError('invalid cache byte budget');
+  if (!Number.isInteger(eventLimit) || eventLimit < 1 || eventLimit > 512) throw new RangeError('invalid event limit');
+  const cleanCache = {};
+  for (const root of work.items) { const entry = sanitizeCache(cache?.[root.id], root); if (entry) cleanCache[root.id] = entry; }
+  cache = cleanCache;
+  const refreshOrder = fairRefresh(work.items, cache, deepLimit, now, ttlMs);
+  const selected = new Set(refreshOrder.map(r => r.id));
+  const items = [], threads = [], coverage = [], nextCache = { ...cache }; let refreshed = 0, cacheHits = 0;
+  for (const root of [...refreshOrder, ...work.items.filter(r => !selected.has(r.id))]) {
+    const old = cache[root.id]; let entry;
+    if (selected.has(root.id) && reader.remaining >= (root.kind === 'pull_request' ? 3 : 1)) {
+      const feedback = await readFeedback(reader, root);
+      const record = conservativeRecord(classify, root, feedback, login);
+      entry = { sourceUpdatedAt: root.updatedAt, inspectedAt: new Date(now).toISOString(), complete: feedback.complete, reason: feedback.reason,
+        record, events: feedback.events.slice(-eventLimit), eventCount: feedback.events.length };
+      nextCache[root.id] = entry; refreshed++;
+    } else if (old?.complete && old.sourceUpdatedAt === root.updatedAt && now - Date.parse(old.inspectedAt) >= 0 && now - Date.parse(old.inspectedAt) < ttlMs) {
+      // The current inventory positively observed this public root again.
+      entry = old; cacheHits++;
+    } else {
+      entry = { sourceUpdatedAt: root.updatedAt, inspectedAt: null, complete: false, reason: 'refresh_pending',
+        record: conservativeRecord(classify, root, { complete: false, activities: [] }, login), events: [], eventCount: 0 };
+    }
+    items.push(entry.record);
+    threads.push({ repo: root.repo, repoVisibility: 'public', number: root.number, events: entry.events });
+    coverage.push({ repo: root.repo, number: root.number, kind: root.kind, state: root.state, sourceUpdatedAt: root.updatedAt,
+      inspectedAt: entry.inspectedAt, feedbackComplete: entry.complete, checksComplete: false, reason: entry.reason,
+      eventsReturned: entry.events.length, eventsTotal: entry.eventCount, eventsTruncated: entry.eventCount > entry.events.length });
+  }
+  // Bound retained last-good cache; never use non-observed entries as public output.
+  for (const [key, entry] of Object.entries(nextCache)) if (now - Date.parse(entry.inspectedAt ?? '') > 30 * 86400_000) delete nextCache[key];
+  const kept = Object.entries(nextCache).sort((a, b) => (Date.parse(b[1].inspectedAt) || 0) - (Date.parse(a[1].inspectedAt) || 0)).slice(0, 20_000);
+  const bounded = []; let cacheBytes = 2;
+  for (const [key, entry] of kept) {
+    const bytes = Buffer.byteLength(JSON.stringify(key) + ':' + JSON.stringify(entry)) + (bounded.length ? 1 : 0);
+    if (cacheBytes + bytes > maxCacheBytes) continue;
+    bounded.push([key, entry]); cacheBytes += bytes;
+  }
+  return { items: sort(items), threads, coverage, cache: Object.fromEntries(bounded), refreshed, cacheHits, cacheBytes, cacheEvicted: kept.length - bounded.length };
+}
+
+/** Never spread cache data into a public packet. Rebind identity to the current root. */
+function sanitizeCache(entry, root) {
+  if (!entry || entry.complete !== true || entry.sourceUpdatedAt !== root.updatedAt || !Number.isFinite(Date.parse(entry.inspectedAt)) ||
+      !entry.record || entry.record.repo !== root.repo || entry.record.number !== root.number || entry.record.url !== root.url ||
+      !Array.isArray(entry.events) || !Number.isSafeInteger(entry.eventCount) || entry.eventCount < entry.events.length) return null;
+  const r = entry.record;
+  if (!['P0', 'P1', 'P2'].includes(r.priority) || typeof r.blocker !== 'string' || typeof r.nextAction !== 'string') return null;
+  const events = [];
+  for (const e of entry.events) {
+    if (!e || typeof e.id !== 'string' || !/^(?:comment|review|review_comment):[0-9]+$/.test(e.id) || !['comment', 'review'].includes(e.kind) ||
+        typeof e.actor !== 'string' || e.actor.length > 64 || !Number.isFinite(Date.parse(e.at))) return null;
+    let url; try { url = new URL(e.url); } catch { return null; }
+    if (url.origin !== 'https://github.com' || url.username || url.password || url.search || url.pathname !== new URL(root.url).pathname) return null;
+    events.push({ id: e.id, kind: e.kind, actor: e.actor, at: e.at, url: url.href,
+      actorType: ['User', 'Bot', 'Organization', 'Mannequin'].includes(e.actorType) ? e.actorType : null,
+      authorAssociation: ['COLLABORATOR', 'CONTRIBUTOR', 'FIRST_TIMER', 'FIRST_TIME_CONTRIBUTOR', 'MANNEQUIN', 'MEMBER', 'NONE', 'OWNER'].includes(e.authorAssociation) ? e.authorAssociation : null,
+      reviewState: ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED', 'DISMISSED', 'PENDING'].includes(e.reviewState) ? e.reviewState : null });
+  }
+  const timestamp = x => Number.isFinite(Date.parse(x ?? '')) ? x : null;
+  const record = { repo: root.repo, repoVisibility: 'public', number: root.number, title: root.title, url: root.url,
+    priority: r.priority, blocker: r.blocker.slice(0, 96), nextAction: r.nextAction.slice(0, 768), updatedAt: root.updatedAt,
+    lastExternalAt: timestamp(r.lastExternalAt), latestExternalActor: typeof r.latestExternalActor === 'string' ? r.latestExternalActor.slice(0, 64) : null,
+    latestExternalKind: ['comment', 'review'].includes(r.latestExternalKind) ? r.latestExternalKind : null,
+    latestExternalReviewState: ['APPROVED', 'CHANG
