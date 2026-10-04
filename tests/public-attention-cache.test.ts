@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   canReuseAttention,
+  projectAttentionEvents,
   readAttentionCache,
   writeAttentionCache,
   type AttentionCacheEntry,
@@ -28,10 +29,20 @@ const record = {
 };
 
 function entry(depth: AttentionCacheEntry["depth"]): AttentionCacheEntry {
-  return { sourceUpdatedAt: record.updatedAt, depth, record };
+  return { sourceUpdatedAt: record.updatedAt, depth, record, events: [] };
 }
 
 describe("public attention cache", () => {
+  it("projects body-free event fields from an untrusted cache", () => {
+    const events = projectAttentionEvents([{
+      id: "comment:1", kind: "comment", actor: "example-reviewer", at: record.updatedAt,
+      reviewState: null, url: "https://github.com/example/repo/pull/7#issuecomment-1",
+      body: "RAW_BODY_DO_NOT_PERSIST", extra: { token: "DO_NOT_PERSIST" },
+    }]);
+    assert.equal(events.length, 1);
+    assert.equal(JSON.stringify(events).includes("DO_NOT_PERSIST"), false);
+    assert.deepEqual(Object.keys(events[0]).sort(), ["actor", "at", "id", "kind", "reviewState", "url"]);
+  });
   it("reuses unchanged deep rows, but promotes commented shallow rows to deep inspection", () => {
     assert.equal(canReuseAttention(entry("deep"), record.updatedAt, 3), true);
     assert.equal(canReuseAttention(entry("shallow"), record.updatedAt, 3), false);
