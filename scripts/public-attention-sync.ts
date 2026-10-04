@@ -203,15 +203,39 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
   const pinned = []; let unavailablePins = 0;
   for (const repo of [...new Set(pins)]) {
     if (!validRepo(repo)) throw new CollectionError('invalid_repo_pin');
-    // Positive public visibility is required even for a configured pin.
     try {
-      const { data } = await reader.json(`/repos/${repo}`);
-      if (data.private !== false || data.visibility !== 'public' || !validRepo(data.full_name)) throw new CollectionError('pin_not_public');
-      known.add(data.full_name.toLowerCase());
-      const result = await collectSearch(reader, `is:public repo:${data.full_name} involves:${login} is:open`, { now });
-      pinned.push({ repo: data.full_name, coverage: result.coverage });
+      let canonicalRepo = repo;
+      // Authored/recent discovery already proved this repository public, so
+      // reuse that visibility evidence. The repo-scoped open-thread scan still
+      // runs: a pin exists specifically to recover quiet older open work.
+      if (!known.has(repo.toLowerCase())) {
+        const { data } = await reader.json(`/repos/${repo}`);
+        if (
+          data.private !== false ||
+          data.visibility !== 'public' ||
+          !validRepo(data.full_name)
+        ) {
+          throw new CollectionError('pin_not_public');
+        }
+        canonicalRepo = data.full_name;
+        known.add(canonicalRepo.toLowerCase());
+      } else {
+        canonicalRepo =
+          [...byId.values()].find(
+            (row) => row.repo.toLowerCase() === repo.toLowerCase(),
+          )?.repo ?? repo;
+      }
+
+      const result = await collectSearch(
+        reader,
+        `is:public repo:${canonicalRepo} involves:${login} is:open`,
+        { now },
+      );
+      pinned.push({ repo: canonicalRepo, coverage: result.coverage });
       for (const row of result.items) byId.set(row.id, row);
-    } catch { unavailablePins++; }
+    } catch {
+      unavailablePins++;
+    }
   }
   const repositories = [...known].sort().map(repo => ({ repo, repoVisibility: 'public', reasons: [authored.items.some(r => r.repo.toLowerCase() === repo) ? 'open-authored-pr' : null,
     recent.items.some(r => r.repo.toLowerCase() === repo) ? 'recent-involvement' : null, pinned.some(r => r.repo.toLowerCase() === repo) ? 'pin' : null].filter(Boolean) }));
