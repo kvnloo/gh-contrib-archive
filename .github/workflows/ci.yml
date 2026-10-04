@@ -27,6 +27,15 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run dogfood:api
+      - run: npm run eval:api
+      - name: Upload API eval receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-evals-${{ github.run_id }}
+          path: .artifacts/*.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Verify static export contract
         run: |
           test -f out/index.html

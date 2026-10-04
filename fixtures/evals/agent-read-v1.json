@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "privacy": "synthetic",
+  "collectorBudgets": {
+    "cold": { "maxRequests": 5, "minCacheHits": 0 },
+    "warm": { "maxRequests": 1, "minCacheHits": 2 },
+    "oneChanged": { "maxRequests": 3, "minCacheHits": 1 }
+  },
+  "readContracts": [
+    { "id": "next-action", "endpoint": "bootstrap.json", "maxReads": 1, "maxBytes": 16384 },
+    { "id": "work-queue", "endpoint": "queues.json", "maxReads": 1 },
+    { "id": "recent-change", "endpoint": "recent.json", "maxReads": 1 },
+    { "id": "actor-context", "endpoint": "actors.json", "maxReads": 1 },
+    { "id": "semantic-links", "endpoint": "semantic.json", "maxReads": 1 }
+  ]
+}
