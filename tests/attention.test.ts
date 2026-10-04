@@ -49,6 +49,9 @@ describe("attention classification", () => {
     );
     assert.equal(result.priority, "P0");
     assert.equal(result.blocker, "verification_requested");
+    assert.equal(result.latestExternalActor, "juliusmarminge");
+    assert.equal(result.latestExternalKind, "comment");
+    assert.equal(result.latestExternalReviewState, null);
   });
 
   it("makes requested changes P0", () => {
@@ -68,6 +71,9 @@ describe("attention classification", () => {
     );
     assert.equal(result.priority, "P0");
     assert.equal(result.blocker, "changes_requested");
+    assert.equal(result.latestExternalActor, "maintainer");
+    assert.equal(result.latestExternalKind, "review");
+    assert.equal(result.latestExternalReviewState, "CHANGES_REQUESTED");
   });
 
   it("ignores bot chatter when finding unanswered human feedback", () => {
@@ -117,6 +123,8 @@ describe("attention classification", () => {
     );
     assert.equal(JSON.stringify(result).includes("ghp_DO_NOT_STORE"), false);
     assert.equal("activities" in result, false);
+    assert.equal(result.latestExternalActor, "maintainer");
+    assert.equal(result.latestExternalKind, "comment");
   });
 
   it("carries live repository visibility into normalized state", () => {
