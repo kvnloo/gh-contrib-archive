@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { projectAttentionEvents } from "./public-attention-cache.ts";
 
 export const PUBLIC_THREAD_EVENTS_SCHEMA = 1 as const;
 
@@ -76,15 +77,12 @@ export function publicThreadEventsFromRest(
     .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
 }
 
-function validEvent(value: unknown): value is PublicThreadEvent {
-  if (!value || typeof value !== "object") return false;
-  const row = value as Record<string, unknown>;
-  return (
-    typeof row.id === "string" &&
-    typeof row.actor === "string" &&
-    (row.kind === "comment" || row.kind === "review") &&
-    typeof row.at === "string"
-  );
+export function projectPublicThreadEvents(value: unknown): PublicThreadEvent[] {
+  return projectAttentionEvents(value).map((event) => ({
+    ...event,
+    actorType: event.actorType ?? null,
+    authorAssociation: event.authorAssociation ?? null,
+  }));
 }
 
 export function readThreadEventsSeed(filePath: string): PublicThreadEventsSeed | null {
@@ -108,6 +106,8 @@ export function readThreadEventsSeed(filePath: string): PublicThreadEventsSeed |
         typeof row.repo !== "string" ||
         typeof row.number !== "number" ||
         typeof row.sourceUpdatedAt !== "string" ||
+        !Number.isSafeInteger(row.number) || row.number <= 0 ||
+        key !== `${row.repo}#${row.number}` ||
         !Array.isArray(row.events)
       ) {
         continue;
@@ -116,7 +116,7 @@ export function readThreadEventsSeed(filePath: string): PublicThreadEventsSeed |
         repo: row.repo,
         number: row.number,
         sourceUpdatedAt: row.sourceUpdatedAt,
-        events: row.events.filter(validEvent),
+        events: projectPublicThreadEvents(row.events),
       };
     }
     return {
@@ -141,7 +141,12 @@ export function writeThreadEventsSeed(
     privacy: "public-safe",
     updatedAt,
     threads: Object.fromEntries(
-      [...threads.entries()].sort(([a], [b]) => a.localeCompare(b)),
+      [...threads.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, row]) => [key, {
+        repo: row.repo,
+        number: row.number,
+        sourceUpdatedAt: row.sourceUpdatedAt,
+        events: projectPublicThreadEvents(row.events),
+      }]),
     ),
   };
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");

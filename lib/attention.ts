@@ -42,6 +42,9 @@ export type AttentionRecord = {
   nextAction: string;
   updatedAt: string;
   lastExternalAt: string | null;
+  latestExternalActor: string | null;
+  latestExternalKind: AttentionActivity["kind"] | null;
+  latestExternalReviewState: string | null;
   lastSelfAt: string | null;
   ciState: "failing" | "passing" | "pending" | "none";
   reviewDecision: string | null;
@@ -182,6 +185,9 @@ export function classifyPullRequest(
     nextAction,
     updatedAt: snapshot.updatedAt,
     lastExternalAt,
+    latestExternalActor: latestExternal?.actor ?? null,
+    latestExternalKind: latestExternal?.kind ?? null,
+    latestExternalReviewState: latestExternal?.reviewState ?? null,
     lastSelfAt,
     ciState: ci,
     reviewDecision: snapshot.reviewDecision,
