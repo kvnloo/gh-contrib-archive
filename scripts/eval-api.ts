@@ -68,6 +68,9 @@ export async function evaluateCollector() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "api-collector-eval-"));
   const runs: Json[] = [];
   const states: Json[] = [];
+  const policyFile = path.join(root, "policy.json");
+  const cacheFile = path.join(root, ".cache", "public-attention.json");
+  fs.writeFileSync(policyFile, JSON.stringify({ schemaVersion: 1, recentDays: 60, pins: [] }));
   let privacyPass = true;
   try {
     for (const phase of ["cold", "warm", "dirty"]) {
@@ -77,22 +80,27 @@ export async function evaluateCollector() {
         fileURLToPath(new URL("./public-attention-sync.ts", import.meta.url))], {
         cwd: root, encoding: "utf8", timeout: 10_000, maxBuffer: 512 * 1024,
         env: { PATH: process.env.PATH, HOME: root, NODE_NO_WARNINGS: "1", GITHUB_PUBLIC_LOGIN: "fixture-self",
-          PUBLIC_ATTENTION_CONCURRENCY: "2", API_EVAL_DIRTY: phase === "dirty" ? "1" : "0" },
+          PUBLIC_ATTENTION_CONCURRENCY: "2", PUBLIC_ATTENTION_DEEP_LIMIT: "2",
+          PUBLIC_ATTENTION_POLICY: policyFile, PUBLIC_ATTENTION_CACHE: cacheFile,
+          API_EVAL_DIRTY: phase === "dirty" ? "1" : "0" },
       });
       const elapsedMs = Math.round((performance.now() - started) * 100) / 100;
       if (child.status !== 0 || child.error) { runs.push({ phase, status: "fail", elapsedMs }); break; }
       try {
       const seed = readJson(path.join(root, "data/attention-seed.json"));
       const transport = readJson(path.join(root, "transport.json"));
-      const cache = readJson(path.join(root, ".cache/public-attention.json"));
+      const cache = readJson(cacheFile);
       privacyPass &&= !/SYNTHETIC_(FEEDBACK|TOKEN)_SENTINEL/.test(JSON.stringify({ seed, cache }));
-      const expectedRequests = phase === "cold" ? 5 : phase === "warm" ? 1 : 3;
-      const passed = seed.requestCount === expectedRequests && transport.requests === seed.requestCount &&
-        transport.maxActive <= 4 && transport.unexpected === 0 && seed.cachedOpen === 2 &&
+      const expectedRequests = phase === "cold" ? 6 : phase === "warm" ? 2 : 4;
+      const coverage = seed.coverage ?? {};
+      const passed = coverage.requests === expectedRequests && transport.requests === coverage.requests &&
+        transport.maxActive <= 4 && transport.unexpected === 0 && coverage.complete === true &&
+        coverage.feedbackComplete === true && seed.items?.length === 2 &&
         seed.items?.every((row: Json) => row.priority === "P0") && seed.threads?.length === 2;
       runs.push({ phase, status: passed ? "pass" : "fail", elapsedMs,
         requestCount: count(transport.requests), maxConcurrentRequests: count(transport.maxActive),
-        cacheHits: count(seed.cacheHits), cacheMisses: count(seed.cacheMisses), deepInspected: count(seed.deepInspected) });
+        cacheHits: count(coverage.cacheHits), cacheMisses: count(coverage.refreshed),
+        deepInspected: count(coverage.refreshed) });
       states.push({ items: seed.items, threads: seed.threads });
       } catch { runs.push({ phase, status: "fail", elapsedMs, reason: "missing_or_invalid_collector_output" }); break; }
     }

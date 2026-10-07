@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { classifyPullRequest, sortAttention } from '../lib/attention.ts';
 
 
@@ -391,11 +392,20 @@ function sanitizeCache(entry, root) {
   return { sourceUpdatedAt: root.updatedAt, inspectedAt: entry.inspectedAt, complete: true, reason: null, record, events, eventCount: entry.eventCount };
 }
 
-const cacheFile = path.resolve('.cache/covered-attention.json');
-const seedFile = path.resolve('data/attention-seed.json');
-const coverageFile = path.resolve('data/coverage-seed.json');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const sourceFile = relative => path.join(repoRoot, relative);
+const outputFile = (envName, fallback) => path.resolve(process.env[envName] || fallback);
+const cacheFile = outputFile('PUBLIC_ATTENTION_CACHE', '.cache/covered-attention.json');
+const seedFile = outputFile('PUBLIC_ATTENTION_SEED', 'data/attention-seed.json');
+const coverageFile = outputFile('PUBLIC_ATTENTION_COVERAGE', 'data/coverage-seed.json');
+const policyFile = process.env.PUBLIC_ATTENTION_POLICY
+  ? path.resolve(process.env.PUBLIC_ATTENTION_POLICY)
+  : sourceFile('data/active-repos.json');
 const VERSION = 1;
-const classifierRevision = createHash('sha256').update(fs.readFileSync('lib/attention.ts')).update(fs.readFileSync('scripts/public-attention-sync.ts')).digest('hex');
+const classifierRevision = createHash('sha256')
+  .update(fs.readFileSync(sourceFile('lib/attention.ts')))
+  .update(fs.readFileSync(sourceFile('scripts/public-attention-sync.ts')))
+  .digest('hex');
 const parse = (file: string, fallback: any) => { try { if (fs.statSync(file).size > 32 * 1024 * 1024) return fallback; return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
 const write = (file: string, value: unknown) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -405,7 +415,7 @@ const write = (file: string, value: unknown) => {
 };
 async function main() {
   const now = Date.now();
-  const policy = parse('data/active-repos.json', { recentDays: 60, pins: ['bilawalsidhu/gods-eye-view'] });
+  const policy = parse(policyFile, { recentDays: 60, pins: ['bilawalsidhu/gods-eye-view'] });
   const login = process.env.GITHUB_PUBLIC_LOGIN?.trim() || 'kvnloo';
   const token = process.env.GITHUB_TOKEN || '';
   const reader = new GithubReader({ token, ...(process.env.PUBLIC_READ_REQUEST_LIMIT ? { requestLimit: Number(process.env.PUBLIC_READ_REQUEST_LIMIT) } : {}) });
