@@ -418,7 +418,13 @@ async function main() {
   const policy = parse(policyFile, { recentDays: 60, pins: ['bilawalsidhu/gods-eye-view'] });
   const login = process.env.GITHUB_PUBLIC_LOGIN?.trim() || 'kvnloo';
   const token = process.env.GITHUB_TOKEN || '';
-  const reader = new GithubReader({ token, ...(process.env.PUBLIC_READ_REQUEST_LIMIT ? { requestLimit: Number(process.env.PUBLIC_READ_REQUEST_LIMIT) } : {}) });
+  const reader = new GithubReader({
+    token,
+    ...(process.env.PUBLIC_READ_REQUEST_LIMIT ? { requestLimit: Number(process.env.PUBLIC_READ_REQUEST_LIMIT) } : {}),
+    ...(process.env.PUBLIC_ATTENTION_SEARCH_INTERVAL_MS !== undefined
+      ? { searchIntervalMs: Number(process.env.PUBLIC_ATTENTION_SEARCH_INTERVAL_MS) }
+      : {}),
+  });
   const existing = parse(cacheFile, {});
   const cache = existing.version === VERSION && existing.classifierRevision === classifierRevision && existing.login === login && existing.items && typeof existing.items === 'object' ? existing.items : {};
   const configuredPins = Array.isArray(policy.pins) ? policy.pins : [];
