@@ -40,12 +40,15 @@ describe("collector event/cache integration", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "collector-events-"));
     try {
       const mockFile = path.join(root, "mock.mjs");
+      const policyFile = path.join(root, "policy.json");
       fs.writeFileSync(mockFile, mock);
+      fs.writeFileSync(policyFile, JSON.stringify({ schemaVersion: 1, recentDays: 60, pins: [] }));
       const run = () => {
         const result = spawnSync(process.execPath, ["--experimental-strip-types", "--import", mockFile, collector], {
           cwd: root, encoding: "utf8", timeout: 15000,
           env: { ...process.env, GITHUB_PUBLIC_LOGIN: "example-author", PUBLIC_ATTENTION_CONCURRENCY: "2",
-            PUBLIC_ATTENTION_DEEP_LIMIT: "2", PUBLIC_ATTENTION_CACHE: path.join(root, "cache.json") },
+            PUBLIC_ATTENTION_DEEP_LIMIT: "2", PUBLIC_ATTENTION_CACHE: path.join(root, "cache.json"),
+            PUBLIC_ATTENTION_POLICY: policyFile },
         });
         assert.equal(result.status, 0, result.stderr);
         const output = fs.readFileSync(path.join(root, "data", "attention-seed.json"), "utf8");
@@ -55,14 +58,15 @@ describe("collector event/cache integration", () => {
         return { seed: JSON.parse(output), requests: JSON.parse(fs.readFileSync(path.join(root, "requests.json"), "utf8")) };
       };
       const cold = run();
-      assert.equal(cold.requests.length, 5);
-      assert.equal(cold.seed.requestCount, 5);
+      assert.equal(cold.requests.length, 6);
+      assert.equal(cold.seed.coverage.requests, 6);
+      assert.equal(cold.seed.coverage.complete, true);
       assert.equal(cold.seed.threads?.length, 2, "cold inspection must emit both public thread snapshots");
       assert.deepEqual(cold.seed.items.map((row: { priority: string }) => row.priority), ["P0", "P0"]);
       const warm = run();
-      assert.equal(warm.requests.length, 1);
-      assert.equal(warm.seed.requestCount, 1);
-      assert.equal(warm.seed.cacheHits, 2);
+      assert.equal(warm.requests.length, 2);
+      assert.equal(warm.seed.coverage.requests, 2);
+      assert.equal(warm.seed.coverage.cacheHits, 2);
       assert.deepEqual(warm.seed.items, cold.seed.items);
       assert.deepEqual(warm.seed.threads, cold.seed.threads, "warm reuse must not erase event context");
 
@@ -72,7 +76,7 @@ describe("collector event/cache integration", () => {
       for (const entry of Object.values(legacy.items) as Record<string, unknown>[]) delete entry.events;
       fs.writeFileSync(path.join(root, "cache.json"), JSON.stringify(legacy));
       const backfilled = run();
-      assert.equal(backfilled.requests.length, 5);
+      assert.equal(backfilled.requests.length, 6);
       assert.deepEqual(backfilled.seed.threads, cold.seed.threads);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
