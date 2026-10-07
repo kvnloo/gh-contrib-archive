@@ -15,15 +15,22 @@ globalThis.fetch = async (input) => {
   maxActive = Math.max(maxActive, active);
   try {
     await delay(2);
-    if (url.pathname === "/search/issues") return Response.json({ total_count: 2, items: [101, 102].map((number) => ({
-      id: number, number, title: "Synthetic change", repository_url: "https://api.github.com/repos/fixture/repo",
-      html_url: `https://github.com/fixture/repo/pull/${number}`, state: "open", draft: false,
-      user: { login: "fixture-self" }, comments: 1,
-      updated_at: dirty && number === 101 ? "2026-01-02T00:00:00Z" : "2026-01-01T00:00:00Z",
-    })) });
+    if (url.pathname === "/repos/bilawalsidhu/gods-eye-view") {
+      return Response.json({ private: false, visibility: "public", full_name: "bilawalsidhu/gods-eye-view" });
+    }
+    if (url.pathname === "/search/issues") {
+      const q = url.searchParams.get("q") ?? "";
+      if (q.includes("repo:bilawalsidhu/gods-eye-view")) return Response.json({ total_count: 0, items: [] });
+      return Response.json({ total_count: 2, items: [101, 102].map((number) => ({
+        id: number, number, title: "Synthetic change", repository_url: "https://api.github.com/repos/fixture/repo",
+        html_url: `https://github.com/fixture/repo/pull/${number}`, state: "open", draft: false,
+        user: { login: "fixture-self" }, comments: 1, pull_request: {},
+        updated_at: dirty && number === 101 ? "2026-01-02T00:00:00Z" : "2026-01-01T00:00:00Z",
+      })) });
+    }
     const match = /^\/repos\/fixture\/repo\/(issues|pulls)\/(101|102)\/(comments|reviews)$/.exec(url.pathname);
     if (!match) { unexpected += 1; throw new Error("unexpected fixture route"); }
-    if (match[4] === "reviews") return Response.json([]);
+    if (match[3] === "reviews") return Response.json([]);
     return Response.json([{
       id: Number(match[2]), user: { login: "fixture-reviewer", type: "User" },
       body: "Please run the regression test. SYNTHETIC_FEEDBACK_SENTINEL",

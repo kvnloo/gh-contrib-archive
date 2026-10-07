@@ -65,11 +65,11 @@ describe("API evaluation and aggregate analytics", () => {
 
   it("executes the real collector cold, warm and dirty with identical warm events", async () => {
     const result = await evaluateCollector();
-    assert.equal(result.status, "pass");
-    assert.deepEqual(result.runs.map((run) => run.requestCount), [6, 2, 4]);
+    assert.equal(result.status, "pass", JSON.stringify(result));
+    assert.deepEqual(result.runs.map((run) => run.requestCount), [10, 4, 7]);
     assert.equal(result.warmContentEqual, true);
     assert.equal(result.privacyPass, true);
-    assert.equal(result.requestsAvoidedWarm, 4);
+    assert.equal(result.requestsAvoidedWarm, 6);
   });
 
   it("checks bootstrap identity/revisions/bytes without logging exported content", () => {

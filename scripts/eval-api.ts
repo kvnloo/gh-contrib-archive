@@ -79,8 +79,8 @@ export async function evaluateCollector() {
         new URL("../evals/mock-github.mjs", import.meta.url).href,
         fileURLToPath(new URL("./public-attention-sync.ts", import.meta.url))], {
         cwd: root, encoding: "utf8", timeout: 10_000, maxBuffer: 512 * 1024,
-        env: { PATH: process.env.PATH, HOME: root, NODE_NO_WARNINGS: "1", GITHUB_PUBLIC_LOGIN: "fixture-self",
-          PUBLIC_ATTENTION_CONCURRENCY: "2", PUBLIC_ATTENTION_DEEP_LIMIT: "2",
+        env: { PATH: process.env.PATH, HOME: root, NODE_NO_WARNINGS: "1", GITHUB_TOKEN: "", GH_TOKEN: "",
+          GITHUB_PUBLIC_LOGIN: "fixture-self", PUBLIC_ATTENTION_CONCURRENCY: "2", PUBLIC_ATTENTION_DEEP_LIMIT: "2",
           PUBLIC_ATTENTION_POLICY: policyFile, PUBLIC_ATTENTION_CACHE: cacheFile,
           API_EVAL_DIRTY: phase === "dirty" ? "1" : "0" },
       });
@@ -91,7 +91,7 @@ export async function evaluateCollector() {
       const transport = readJson(path.join(root, "transport.json"));
       const cache = readJson(cacheFile);
       privacyPass &&= !/SYNTHETIC_(FEEDBACK|TOKEN)_SENTINEL/.test(JSON.stringify({ seed, cache }));
-      const expectedRequests = phase === "cold" ? 6 : phase === "warm" ? 2 : 4;
+      const expectedRequests = phase === "cold" ? 10 : phase === "warm" ? 4 : 7;
       const coverage = seed.coverage ?? {};
       const passed = coverage.requests === expectedRequests && transport.requests === coverage.requests &&
         transport.maxActive <= 4 && transport.unexpected === 0 && coverage.complete === true &&
