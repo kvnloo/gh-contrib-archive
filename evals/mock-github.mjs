@@ -21,12 +21,23 @@ globalThis.fetch = async (input) => {
     if (url.pathname === "/search/issues") {
       const q = url.searchParams.get("q") ?? "";
       if (q.includes("repo:bilawalsidhu/gods-eye-view")) return Response.json({ total_count: 0, items: [] });
-      return Response.json({ total_count: 2, items: [101, 102].map((number) => ({
+      const items = [101, 102].map((number) => ({
         id: number, number, title: "Synthetic change", repository_url: "https://api.github.com/repos/fixture/repo",
         html_url: `https://github.com/fixture/repo/pull/${number}`, state: "open", draft: false,
         user: { login: "fixture-self" }, comments: 1, pull_request: {},
         updated_at: dirty && number === 101 ? "2026-01-02T00:00:00Z" : "2026-01-01T00:00:00Z",
-      })) });
+      }));
+      // The recent-involvement scan deliberately changes between the aggregate
+      // count and its disjoint leaf scans. This models a live GitHub search
+      // without making a stable partition incomplete.
+      if (q.includes("involves:fixture-self")) {
+        const range = /created:([^ ]+)\.\.([^ ]+)/.exec(q);
+        if (range?.[1]?.startsWith("2008-01-01")) return Response.json({ total_count: 1000, items: [] });
+        const target = Date.parse("2026-01-01T00:00:00Z");
+        const containsTarget = range && Date.parse(range[1]) <= target && target <= Date.parse(range[2]);
+        return Response.json({ total_count: containsTarget ? 2 : 0, items: containsTarget ? items : [] });
+      }
+      return Response.json({ total_count: 2, items });
     }
     const match = /^\/repos\/fixture\/repo\/(issues|pulls)\/(101|102)\/(comments|reviews)$/.exec(url.pathname);
     if (!match) { unexpected += 1; throw new Error("unexpected fixture route"); }

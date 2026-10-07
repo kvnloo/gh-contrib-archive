@@ -66,7 +66,7 @@ describe("API evaluation and aggregate analytics", () => {
   it("executes the real collector cold, warm and dirty with identical warm events", async () => {
     const result = await evaluateCollector();
     assert.equal(result.status, "pass", JSON.stringify(result));
-    assert.deepEqual(result.runs.map((run) => run.requestCount), [10, 4, 7]);
+    assert.deepEqual(result.runs.map((run) => run.requestCount), [12, 6, 9]);
     assert.equal(result.warmContentEqual, true);
     assert.equal(result.privacyPass, true);
     assert.equal(result.requestsAvoidedWarm, 6);

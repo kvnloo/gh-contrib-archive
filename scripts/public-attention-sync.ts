@@ -151,9 +151,18 @@ async function collectSearch(reader, query, { now = Date.now(), start = firstSec
   };
   if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) throw new RangeError('invalid search interval');
   await walk(nowSecond(start), nowSecond(end));
-  const complete = partitions.every(p => p.complete) && items.size === rootReported;
-  return { items: [...items.values()], coverage: { source: 'github-public-search', scope: query, reported: rootReported, fetched: items.size, complete, partitions,
-    reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'search_changed_during_scan' } };
+  // The initial aggregate count is only a diagnostic. A partitioned scan can
+  // legitimately observe new matching rows while it runs. The verified
+  // snapshot is the union of disjoint leaf partitions, each of which is
+  // internally count-stable across its own pagination.
+  const verifiedReported = partitions.reduce(
+    (sum, partition) => sum + (Number.isSafeInteger(partition.reported) ? partition.reported : 0),
+    0,
+  );
+  const complete = partitions.every(p => p.complete) && items.size === verifiedReported;
+  return { items: [...items.values()], coverage: { source: 'github-public-search', scope: query,
+    reported: rootReported, verifiedReported, fetched: items.size, complete, partitions,
+    reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'partition_count_mismatch' } };
 }
 const PR_QUERY = `query($login:String!,$after:String){user(login:$login){pullRequests(first:100,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{number title url state isDraft updatedAt author{login} comments(first:1){totalCount} reviewDecision mergeStateStatus repository{nameWithOwner isPrivate visibility}}}}}`;
 async function collectAuthored(reader, login, { now = Date.now() } = {}) {
@@ -444,7 +453,16 @@ async function main() {
   write(cacheFile, { version: VERSION, classifierRevision, login, savedAt: observedAt, items: result.cache });
   write(seedFile, seed); write(coverageFile, coverage);
   console.log(JSON.stringify({ inventoryComplete: coverage.complete, feedbackComplete: coverage.feedbackComplete,
-    repositories: work.repositories.length, threads: result.items.length, requests: reader.requests, refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted }));
+    repositories: work.repositories.length, threads: result.items.length, requests: reader.requests,
+    refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted,
+    inventoryDiagnostics: {
+      authored: { complete: work.coverage.authored?.complete === true, reason: work.coverage.authored?.reason ?? null },
+      recent: { complete: work.coverage.recent?.complete === true, reason: work.coverage.recent?.reason ?? null,
+        reported: work.coverage.recent?.reported ?? null, verifiedReported: work.coverage.recent?.verifiedReported ?? null,
+        fetched: work.coverage.recent?.fetched ?? null },
+      unavailablePins: work.coverage.unavailablePins,
+      pinned: work.coverage.pinned?.map(pin => ({ repo: pin.repo, complete: pin.coverage?.complete === true, reason: pin.coverage?.reason ?? null })) ?? [],
+    } }));
 }
 main().catch(() => {
   // Never print provider errors, tokens, private names, or retain a fresh-looking fallback.
