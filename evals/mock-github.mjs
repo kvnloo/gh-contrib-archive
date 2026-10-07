@@ -32,7 +32,8 @@ globalThis.fetch = async (input) => {
       // without making a stable partition incomplete.
       if (q.includes("involves:fixture-self")) {
         const range = /created:([^ ]+)\.\.([^ ]+)/.exec(q);
-        if (range?.[1]?.startsWith("2008-01-01")) return Response.json({ total_count: 1000, items: [] });
+        const spanMs = range ? Date.parse(range[2]) - Date.parse(range[1]) : 0;
+        if (spanMs > 15 * 365 * 86400_000) return Response.json({ total_count: 1000, items: [] });
         const target = Date.parse("2026-01-01T00:00:00Z");
         const containsTarget = range && Date.parse(range[1]) <= target && target <= Date.parse(range[2]);
         return Response.json({ total_count: containsTarget ? 2 : 0, items: containsTarget ? items : [] });
