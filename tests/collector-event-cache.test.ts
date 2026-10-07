@@ -30,14 +30,15 @@ globalThis.fetch = async url => {
     if (q.includes("repo:bilawalsidhu/gods-eye-view")) return Response.json({ total_count: 0, items: [] });
     return Response.json({ total_count: 2, items: prs });
   }
-  if (String(url).includes("/comments?")) {
-    const number = Number(String(url).match(/issues\\/(\\d+)/)[1]);
+  const issueComments = /^\/repos\/example\/repo\/issues\/(\d+)\/comments$/.exec(parsed.pathname);
+  if (issueComments) {
+    const number = Number(issueComments[1]);
     return Response.json([{ id: number, user: { login: "example-reviewer" },
       body: "Please run the regression test. RAW_BODY_DO_NOT_PERSIST",
       created_at: at, html_url: "https://github.com/example/repo/pull/" + number + "#issuecomment-" + number,
     }]);
   }
-  if (String(url).includes("/reviews?")) return Response.json([]);
+  if (/^\/repos\/example\/repo\/pulls\/\d+\/(reviews|comments)$/.test(parsed.pathname)) return Response.json([]);
   throw new Error("unexpected synthetic request");
 };
 process.on("exit", () => fs.writeFileSync("requests.json", JSON.stringify(requests)));
@@ -55,7 +56,7 @@ describe("collector event/cache integration", () => {
         const result = spawnSync(process.execPath, ["--experimental-strip-types", "--import", mockFile, collector], {
           cwd: root, encoding: "utf8", timeout: 15000,
           env: { ...process.env, GITHUB_TOKEN: "", GH_TOKEN: "", GITHUB_PUBLIC_LOGIN: "example-author",
-            PUBLIC_ATTENTION_CONCURRENCY: "2", PUBLIC_ATTENTION_DEEP_LIMIT: "2",
+            PUBLIC_ATTENTION_CONCURRENCY: "2", PUBLIC_ATTENTION_DEEP_LIMIT: "2", PUBLIC_ATTENTION_SEARCH_INTERVAL_MS: "0",
             PUBLIC_ATTENTION_CACHE: path.join(root, "cache.json"), PUBLIC_ATTENTION_POLICY: policyFile },
         });
         assert.equal(result.status, 0, result.stderr);

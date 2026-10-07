@@ -81,7 +81,7 @@ export async function evaluateCollector() {
         cwd: root, encoding: "utf8", timeout: 10_000, maxBuffer: 512 * 1024,
         env: { PATH: process.env.PATH, HOME: root, NODE_NO_WARNINGS: "1", GITHUB_TOKEN: "", GH_TOKEN: "",
           GITHUB_PUBLIC_LOGIN: "fixture-self", PUBLIC_ATTENTION_CONCURRENCY: "2", PUBLIC_ATTENTION_DEEP_LIMIT: "2",
-          PUBLIC_ATTENTION_POLICY: policyFile, PUBLIC_ATTENTION_CACHE: cacheFile,
+          PUBLIC_ATTENTION_SEARCH_INTERVAL_MS: "0", PUBLIC_ATTENTION_POLICY: policyFile, PUBLIC_ATTENTION_CACHE: cacheFile,
           API_EVAL_DIRTY: phase === "dirty" ? "1" : "0" },
       });
       const elapsedMs = Math.round((performance.now() - started) * 100) / 100;
