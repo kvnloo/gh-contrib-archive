@@ -390,11 +390,12 @@ export function compilePublicSnapshot(dbPath: string): CompiledPublicSnapshot {
     ).n;
 
     const lastCheckedAt = normalizeDate(
-      (
-        db.prepare("SELECT MAX(ingested_at) AS value FROM contributions").get() as {
-          value: string | null;
-        }
-      ).value,
+      metaValue(db, "finished_at") ??
+        (
+          db.prepare("SELECT MAX(ingested_at) AS value FROM contributions").get() as {
+            value: string | null;
+          }
+        ).value,
     );
     const lastChangedAt = normalizeDate(
       (
