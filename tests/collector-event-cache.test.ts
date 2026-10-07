@@ -58,7 +58,7 @@ describe("collector event/cache integration", () => {
         return { seed: JSON.parse(output), requests: JSON.parse(fs.readFileSync(path.join(root, "requests.json"), "utf8")) };
       };
       const cold = run();
-      assert.equal(cold.requests.length, 6);
+      assert.equal(cold.requests.length, 6, JSON.stringify(cold.requests));
       assert.equal(cold.seed.coverage.requests, 6);
       assert.equal(cold.seed.coverage.complete, true);
       assert.equal(cold.seed.threads?.length, 2, "cold inspection must emit both public thread snapshots");
