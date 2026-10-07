@@ -30,15 +30,15 @@ globalThis.fetch = async url => {
     if (q.includes("repo:bilawalsidhu/gods-eye-view")) return Response.json({ total_count: 0, items: [] });
     return Response.json({ total_count: 2, items: prs });
   }
-  const issueComments = /^\/repos\/example\/repo\/issues\/(\d+)\/comments$/.exec(parsed.pathname);
-  if (issueComments) {
-    const number = Number(issueComments[1]);
+  if (parsed.pathname.startsWith("/repos/example/repo/issues/") && parsed.pathname.endsWith("/comments")) {
+    const number = Number(parsed.pathname.split("/")[5]);
     return Response.json([{ id: number, user: { login: "example-reviewer" },
       body: "Please run the regression test. RAW_BODY_DO_NOT_PERSIST",
       created_at: at, html_url: "https://github.com/example/repo/pull/" + number + "#issuecomment-" + number,
     }]);
   }
-  if (/^\/repos\/example\/repo\/pulls\/\d+\/(reviews|comments)$/.test(parsed.pathname)) return Response.json([]);
+  if (parsed.pathname.startsWith("/repos/example/repo/pulls/") &&
+      (parsed.pathname.endsWith("/reviews") || parsed.pathname.endsWith("/comments"))) return Response.json([]);
   throw new Error("unexpected synthetic request");
 };
 process.on("exit", () => fs.writeFileSync("requests.json", JSON.stringify(requests)));
