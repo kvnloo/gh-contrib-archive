@@ -22,6 +22,14 @@ const issue = (number, login) => ({
 globalThis.fetch = async input => {
   const u = new URL(String(input));
   seen.push(u.pathname);
+  if (u.pathname === "/graphql") return Response.json({ data: { user: { pullRequests: {
+    totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null },
+    nodes: [{ number: 1, title: "Synthetic public PR 1",
+      url: "https://github.com/fixture/repo/pull/1", state: "OPEN", isDraft: false,
+      updatedAt: at, author: { login: "fixture-self" }, comments: { totalCount: 0 },
+      reviewDecision: "REVIEW_REQUIRED", mergeStateStatus: "CLEAN",
+      repository: { nameWithOwner: "fixture/repo", isPrivate: false, visibility: "PUBLIC" } }],
+  } } } });
   if (u.pathname === "/search/issues") {
     const q = u.searchParams.get("q") ?? "";
     if (firstSearch) {
@@ -41,7 +49,7 @@ process.on("exit", () => fs.writeFileSync("requests.json", JSON.stringify(seen))
 `;
 
 describe("public collector transport and GitHub identities", () => {
-  it("retries one transient 502 within budget and keeps public bot/deleted-author rows", () => {
+  it("preserves authenticated GraphQL, retries 502, and accepts public bot/deleted-author rows", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "collector-transport-"));
     try {
       const mockFile = path.join(root, "mock.mjs");
@@ -50,7 +58,7 @@ describe("public collector transport and GitHub identities", () => {
       fs.writeFileSync(policyFile, JSON.stringify({ schemaVersion: 1, recentDays: 60, pins: [] }));
       const result = spawnSync(process.execPath, ["--experimental-strip-types", "--import", mockFile, collector], {
         cwd: root, encoding: "utf8", timeout: 15000,
-        env: { ...process.env, GITHUB_TOKEN: "", GH_TOKEN: "", GH_ARCHIVE_TOKEN: "",
+        env: { ...process.env, GITHUB_TOKEN: "fixture-test-token", GH_TOKEN: "", GH_ARCHIVE_TOKEN: "",
           GITHUB_PUBLIC_LOGIN: "fixture-self", PUBLIC_ATTENTION_DEEP_LIMIT: "0",
           PUBLIC_ATTENTION_SEARCH_INTERVAL_MS: "0", PUBLIC_ATTENTION_POLICY: policyFile,
           PUBLIC_ATTENTION_CACHE: path.join(root, "cache.json") },
