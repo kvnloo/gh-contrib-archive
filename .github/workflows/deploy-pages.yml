@@ -61,6 +61,13 @@ jobs:
           PUBLIC_ATTENTION_DEEP_LIMIT: "48"
         run: npm run inbox:public-sync
 
+      - name: Persist verified covered-inbox progress
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/covered-attention.json
+          key: covered-attention-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
       - id: unit
         run: npm test
 

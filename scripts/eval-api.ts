@@ -91,7 +91,7 @@ export async function evaluateCollector() {
       const transport = readJson(path.join(root, "transport.json"));
       const cache = readJson(cacheFile);
       privacyPass &&= !/SYNTHETIC_(FEEDBACK|TOKEN)_SENTINEL/.test(JSON.stringify({ seed, cache }));
-      const expectedRequests = phase === "cold" ? 10 : phase === "warm" ? 4 : 7;
+      const expectedRequests = phase === "cold" ? 12 : phase === "warm" ? 6 : 9;
       const coverage = seed.coverage ?? {};
       const passed = coverage.requests === expectedRequests && transport.requests === coverage.requests &&
         transport.maxActive <= 4 && transport.unexpected === 0 && coverage.complete === true &&
