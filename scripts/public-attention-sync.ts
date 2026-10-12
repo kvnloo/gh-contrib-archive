@@ -254,7 +254,10 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
     startedAt: new Date(now).toISOString(), recentSince: since, requests: reader.requests } };
 }
 /** Round-robin repos, oldest inspections first. New busy repos cannot starve older ones. */
-function fairRefresh(rows, cache, limit, now, ttlMs = 24 * 3600_000) {
+// Bounded hourly sweeps require enough time to cover the full observed inventory.
+// updatedAt changes invalidate immediately; a 7-day age bound limits undetected drift.
+const FEEDBACK_TTL_MS = 7 * 86400_000;
+function fairRefresh(rows, cache, limit, now, ttlMs = FEEDBACK_TTL_MS) {
   if (!Number.isInteger(limit) || limit < 0 || limit > 1000 || !Number.isFinite(ttlMs) || ttlMs < 1) throw new RangeError('invalid refresh bounds');
   const groups = new Map();
   for (const row of rows) {
@@ -331,7 +334,7 @@ async function readFeedback(reader, root) {
     return { complete: true, activities, events: events.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)), reason: null };
   } catch (e) { return { complete: false, activities, events, reason: e instanceof CollectionError ? e.code : 'feedback_failed' }; }
 }
-async function materializeAttention(reader, work, { classify, sort = rows => rows, login = 'kvnloo', cache = {}, now = Date.now(), deepLimit = 48, ttlMs = 24 * 3600_000, eventLimit = 64, maxCacheBytes = 16 * 1024 * 1024 } = {}) {
+async function materializeAttention(reader, work, { classify, sort = rows => rows, login = 'kvnloo', cache = {}, now = Date.now(), deepLimit = 48, ttlMs = FEEDBACK_TTL_MS, eventLimit = 64, maxCacheBytes = 16 * 1024 * 1024 } = {}) {
   if (!Number.isSafeInteger(maxCacheBytes) || maxCacheBytes < 1024) throw new RangeError('invalid cache byte budget');
   if (!Number.isInteger(eventLimit) || eventLimit < 1 || eventLimit > 512) throw new RangeError('invalid event limit');
   const cleanCache = {};
@@ -347,7 +350,13 @@ async function materializeAttention(reader, work, { classify, sort = rows => row
       const record = conservativeRecord(classify, root, feedback, login);
       entry = { sourceUpdatedAt: root.updatedAt, inspectedAt: new Date(now).toISOString(), complete: feedback.complete, reason: feedback.reason,
         record, events: feedback.events.slice(-eventLimit), eventCount: feedback.events.length };
-      nextCache[root.id] = entry; refreshed++;
+      // Retain only a retry marker after an incomplete read. This advances
+      // round-robin fairness without caching partial feedback as complete.
+      nextCache[root.id] = feedback.complete ? entry : {
+        sourceUpdatedAt: root.updatedAt, inspectedAt: entry.inspectedAt,
+        complete: false, reason: 'retry_pending', record: null, events: [], eventCount: 0,
+      };
+      refreshed++;
     } else if (old?.complete && old.sourceUpdatedAt === root.updatedAt && now - Date.parse(old.inspectedAt) >= 0 && now - Date.parse(old.inspectedAt) < ttlMs) {
       // The current inventory positively observed this public root again.
       entry = old; cacheHits++;
@@ -375,8 +384,14 @@ async function materializeAttention(reader, work, { classify, sort = rows => row
 
 /** Never spread cache data into a public packet. Rebind identity to the current root. */
 function sanitizeCache(entry, root) {
-  if (!entry || entry.complete !== true || entry.sourceUpdatedAt !== root.updatedAt || !Number.isFinite(Date.parse(entry.inspectedAt)) ||
-      !entry.record || entry.record.repo !== root.repo || entry.record.number !== root.number || entry.record.url !== root.url ||
+  if (!entry || entry.sourceUpdatedAt !== root.updatedAt || !Number.isFinite(Date.parse(entry.inspectedAt))) return null;
+  // Incomplete reads only contribute scheduling metadata, never feedback events
+  // or a classification that an agent could mistake for verified coverage.
+  if (entry.complete === false) return {
+    sourceUpdatedAt: root.updatedAt, inspectedAt: entry.inspectedAt,
+    complete: false, reason: 'retry_pending', record: null, events: [], eventCount: 0,
+  };
+  if (entry.complete !== true || !entry.record || entry.record.repo !== root.repo || entry.record.number !== root.number || entry.record.url !== root.url ||
       !Array.isArray(entry.events) || !Number.isSafeInteger(entry.eventCount) || entry.eventCount < entry.events.length) return null;
   const r = entry.record;
   if (!['P0', 'P1', 'P2'].includes(r.priority) || typeof r.blocker !== 'string' || typeof r.nextAction !== 'string') return null;
