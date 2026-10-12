@@ -44,7 +44,7 @@ class GithubReader {
   get remaining() { return this.requestLimit - this.requests; }
   async json(url, { query, variables } = {}) {
     const target = safeApiUrl(url);
-    if (query && (target.pathname !== '/graphql' || !/^\\s*query\\b/.test(query))) throw new CollectionError('read_only_query_required');
+    if (query && (target.pathname !== '/graphql' || !/^\s*query\b/.test(query))) throw new CollectionError('read_only_query_required');
     // Every retry spends from the same hard request budget. HTTP 502/503/504
     // are transient; permission denials fail closed instead of being hidden.
     for (let attempt = 0; attempt < 3; attempt++) {
