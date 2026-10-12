@@ -11,7 +11,7 @@ class CollectionError extends Error {
   constructor(code) { super(code); this.name = 'CollectionError'; this.code = code; }
 }
 const validRepo = (s) => typeof s === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(s) && !s.split('/').some(p => p === '.' || p === '..');
-const validLogin = s => typeof s === 'string' && /^[A-Za-z0-9-]{1,39}$/.test(s);
+const validLogin = s => typeof s === 'string' && /^(?:[A-Za-z0-9-]{1,39}|[A-Za-z0-9-]{1,63}\[bot\])$/.test(s);
 const iso = ms => new Date(ms).toISOString().replace('.000Z', 'Z');
 const firstSecond = Date.parse('2008-01-01T00:00:00Z');
 const nowSecond = ms => Math.floor(ms / 1000) * 1000;
@@ -44,43 +44,57 @@ class GithubReader {
   get remaining() { return this.requestLimit - this.requests; }
   async json(url, { query, variables } = {}) {
     const target = safeApiUrl(url);
-    if (query && (target.pathname !== '/graphql' || !/^\s*query\b/.test(query))) throw new CollectionError('read_only_query_required');
-    if (this.stopped) throw new CollectionError(this.stopped);
-    if (this.remaining <= 0) throw new CollectionError('request_budget_exhausted');
-    if (target.pathname === '/search/issues') {
-      if (this.lastSearchAt !== null) await this.sleep(Math.max(0, this.searchIntervalMs - (this.clock() - this.lastSearchAt)));
-      this.lastSearchAt = this.clock();
+    if (query && (target.pathname !== '/graphql' || !/^\\s*query\\b/.test(query))) throw new CollectionError('read_only_query_required');
+    // Every retry spends from the same hard request budget. HTTP 502/503/504
+    // are transient; permission denials fail closed instead of being hidden.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (this.stopped) throw new CollectionError(this.stopped);
+      if (this.remaining <= 0) throw new CollectionError('request_budget_exhausted');
+      if (target.pathname === '/search/issues') {
+        if (this.lastSearchAt !== null) await this.sleep(Math.max(0, this.searchIntervalMs - (this.clock() - this.lastSearchAt)));
+        this.lastSearchAt = this.clock();
+      }
+      this.requests++;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'gh-contrib-archive/covered-read-model', 'X-GitHub-Api-Version': '2022-11-28' };
+        if (this.token) headers.Authorization = `Bearer ${this.token}`;
+        if (query) headers['Content-Type'] = 'application/json';
+        const r = await this.fetchImpl(target.href, { method: query ? 'POST' : 'GET', headers, redirect: 'error', signal: controller.signal, ...(query ? { body: JSON.stringify({ query, variables }) } : {}) });
+        if (!r.ok) {
+          const rateLimited = r.status === 429 || (r.status === 403 && (r.headers.get('x-ratelimit-remaining') === '0' || r.headers.has('retry-after')));
+          const code = rateLimited ? 'rate_limited' : `http_${r.status}`;
+          const retryAfter = r.headers.has('retry-after') ? Number(r.headers.get('retry-after')) : null;
+          const transient = [502, 503, 504].includes(r.status);
+          const shortRateWait = rateLimited && Number.isFinite(retryAfter) && retryAfter >= 0 && retryAfter <= 15;
+          if (attempt < 2 && this.remaining > 0 && (transient || shortRateWait)) {
+            // Retry-After is capped; never sleep for a token reset period inside a build.
+            clearTimeout(timer);
+            await this.sleep(shortRateWait ? Math.max(1000, retryAfter * 1000) : 1000 * (attempt + 1));
+            continue;
+          }
+          if (r.status === 429 || r.status === 403 || r.status === 401) this.stopped = code;
+          throw new CollectionError(code);
+        }
+        if (Number(r.headers.get('content-length')) > this.maxBodyBytes) throw new CollectionError('response_too_large');
+        const chunks = []; let bytes = 0;
+        if (!r.body) throw new CollectionError('empty_response');
+        for await (const chunk of r.body) {
+          bytes += chunk.byteLength;
+          if (bytes > this.maxBodyBytes) { controller.abort(); throw new CollectionError('response_too_large'); }
+          chunks.push(chunk);
+        }
+        let data;
+        try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new CollectionError('invalid_json'); }
+        if (query && data.errors?.length) throw new CollectionError('graphql_error');
+        return { data, next: nextLink(r.headers.get('link'), target.href) };
+      } catch (e) {
+        if (e instanceof CollectionError) throw e;
+        throw new CollectionError(controller.signal.aborted ? 'request_timeout' : 'network_error');
+      } finally { clearTimeout(timer); }
     }
-    this.requests++;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'gh-contrib-archive/covered-read-model', 'X-GitHub-Api-Version': '2022-11-28' };
-      if (this.token) headers.Authorization = `Bearer ${this.token}`;
-      if (query) headers['Content-Type'] = 'application/json';
-      const r = await this.fetchImpl(target.href, { method: query ? 'POST' : 'GET', headers, redirect: 'error', signal: controller.signal, ...(query ? { body: JSON.stringify({ query, variables }) } : {}) });
-      if (!r.ok) {
-        const code = r.status === 429 || (r.status === 403 && (r.headers.get('x-ratelimit-remaining') === '0' || r.headers.has('retry-after'))) ? 'rate_limited' : `http_${r.status}`;
-        // Stop globally rather than multiplying a rate-limit failure across workers.
-        if (r.status === 429 || r.status === 403 || r.status === 401) this.stopped = code;
-        throw new CollectionError(code);
-      }
-      if (Number(r.headers.get('content-length')) > this.maxBodyBytes) throw new CollectionError('response_too_large');
-      const chunks = []; let bytes = 0;
-      if (!r.body) throw new CollectionError('empty_response');
-      for await (const chunk of r.body) {
-        bytes += chunk.byteLength;
-        if (bytes > this.maxBodyBytes) { controller.abort(); throw new CollectionError('response_too_large'); }
-        chunks.push(chunk);
-      }
-      let data;
-      try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new CollectionError('invalid_json'); }
-      if (query && data.errors?.length) throw new CollectionError('graphql_error');
-      return { data, next: nextLink(r.headers.get('link'), target.href) };
-    } catch (e) {
-      if (e instanceof CollectionError) throw e;
-      throw new CollectionError(controller.signal.aborted ? 'request_timeout' : 'network_error');
-    } finally { clearTimeout(timer); }
+    throw new CollectionError('retry_exhausted');
   }
   async collection(url, maxPages = 30) {
     const rows = [], seen = new Set(); let next = safeApiUrl(url).href;
@@ -99,13 +113,14 @@ class GithubReader {
 function projectSearchRow(row) {
   const match = /^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)$/.exec(row?.repository_url ?? '');
   const repo = match?.[1];
-  if (!validRepo(repo) || !Number.isSafeInteger(row.number) || row.number < 1 || !validLogin(row.user?.login) || !['open', 'closed'].includes(row.state)) return null;
+  if (!validRepo(repo) || !Number.isSafeInteger(row.number) || row.number < 1 || !['open', 'closed'].includes(row.state)) return null;
+  const author = validLogin(row.user?.login) ? row.user.login : 'unknown';
   if (row.repository?.private === true || (row.repository?.visibility && row.repository.visibility !== 'public')) return null;
   const isPr = Boolean(row.pull_request);
   const url = `https://github.com/${repo}/${isPr ? 'pull' : 'issues'}/${row.number}`;
-  if (row.html_url !== url || typeof row.title !== 'string' || !Number.isFinite(Date.parse(row.updated_at))) return null;
+  if (typeof row.html_url !== 'string' || row.html_url.toLowerCase() !== url.toLowerCase() || typeof row.title !== 'string' || !Number.isFinite(Date.parse(row.updated_at))) return null;
   return { id: `${repo.toLowerCase()}#${row.number}`, repo, number: row.number, title: row.title.slice(0, 512), url, kind: isPr ? 'pull_request' : 'issue', state: row.state,
-    author: row.user.login, draft: Boolean(row.draft), updatedAt: row.updated_at, commentCount: Number.isSafeInteger(row.comments) ? row.comments : null,
+    author, draft: Boolean(row.draft), updatedAt: row.updated_at, commentCount: Number.isSafeInteger(row.comments) ? row.comments : null,
     reviewDecision: ['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED'].includes(row.reviewDecision) ? row.reviewDecision : null, mergeState: ['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'DRAFT', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'].includes(row.mergeState) ? row.mergeState : null };
 }
 /** Search is capped at 1,000. Split disjoint creation-second intervals before paginating. */
