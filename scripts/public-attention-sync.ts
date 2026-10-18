@@ -179,14 +179,29 @@ async function collectSearch(reader, query, { now = Date.now(), start = firstSec
     reported: rootReported, verifiedReported, fetched: items.size, complete, partitions,
     reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'partition_count_mismatch' } };
 }
-const PR_QUERY = `query($login:String!,$after:String){user(login:$login){pullRequests(first:100,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{number title url state isDraft updatedAt author{login} comments(first:1){totalCount} reviewDecision mergeStateStatus repository{nameWithOwner isPrivate visibility}}}}}`;
+const PR_QUERY = `query($login:String!,$after:String,$pageSize:Int!){user(login:$login){pullRequests(first:$pageSize,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{number title url state isDraft updatedAt author{login} comments(first:1){totalCount} reviewDecision mergeStateStatus repository{nameWithOwner isPrivate visibility}}}}}`;
 async function collectAuthored(reader, login, { now = Date.now() } = {}) {
   if (!validLogin(login)) throw new CollectionError('invalid_login');
   if (!reader.token) return collectSearch(reader, `is:public is:pr is:open author:${login}`, { now });
-  const items = new Map(), seen = new Set(); let after = null, reported = null, walked = 0, suppressed = 0, unknownVisibility = 0, complete = false, reason = null;
+  const items = new Map(), seen = new Set(); let after = null, pageSize = 100, reported = null, walked = 0, suppressed = 0, unknownVisibility = 0, complete = false, reason = null;
   try {
     do {
-      const { data } = await reader.json('/graphql', { query: PR_QUERY, variables: { login, after } });
+      // A single oversized cursor page can repeatedly 502 even when later
+      // smaller pages are safe. Relay cursors survive changing first: N.
+      // Retry the same cursor at 50 then 25, without counting skipped rows.
+      let response;
+      for (;;) {
+        try {
+          response = await reader.json('/graphql', { query: PR_QUERY, variables: { login, after, pageSize } });
+          break;
+        } catch (error) {
+          if (!(error instanceof CollectionError) ||
+              !['http_502', 'http_503', 'http_504', 'request_timeout'].includes(error.code) ||
+              pageSize <= 25 || reader.remaining < 3) throw error;
+          pageSize = Math.max(25, Math.floor(pageSize / 2));
+        }
+      }
+      const { data } = response;
       const c = data.data?.user?.pullRequests;
       if (!c || !Array.isArray(c.nodes) || !Number.isSafeInteger(c.totalCount) || c.totalCount < 0 || typeof c.pageInfo?.hasNextPage !== 'boolean') throw new CollectionError('invalid_connection');
       if (reported !== null && reported !== c.totalCount) throw new CollectionError('inventory_changed_during_scan');
