@@ -21,6 +21,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Claim-expiry script (offline, fake gh)
+        run: python3 tests/expire_claims.py
       - run: npm run build
       - name: Verify static export contract
         run: |
