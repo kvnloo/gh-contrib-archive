@@ -19,6 +19,20 @@
       },
       "commits": [
         {
+          "sha": "4498a4cf90932283d69382eee09156880c7121e5",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/4498a4cf90932283d69382eee09156880c7121e5",
+          "title": "fix(auxiliary): the main-model compression retry reads its fast-lane config through the authoritative task — the failed aux route's reasoning_effort no longer disables reasoning on main (review on #139872)",
+          "at": "2026-10-16T21:18:50Z",
+          "credit": "referenced",
+          "landing": "maintainer-consolidated",
+          "evidence": "Upstream #139872 merged with explicit salvage of kvnloo work (#130895, kvnloo#469); verified SHA ancestry on main",
+          "verification": "GitHub compare: zero commits behind upstream main",
+          "sourcePRs": [
+            130895
+          ],
+          "landingPR": 139872
+        },
+        {
           "sha": "56fe13344021ee3737c3a9b47a74a73fc199b8e0",
           "url": "https://github.com/NousResearch/hermes-agent/commit/56fe13344021ee3737c3a9b47a74a73fc199b8e0",
           "title": "test(compression): pin complete main fallback route",
@@ -124,9 +138,13 @@
           "title": "fix(desktop): keep native Wayland fullscreen windows painting",
           "at": "2026-09-29T23:51:10Z",
           "credit": "author",
-          "landing": "author-attributed",
-          "evidence": "upstream branch-scoped author-filter",
-          "verification": "in-upstream-branch"
+          "landing": "maintainer-consolidated",
+          "evidence": "Upstream #128180 explicitly adapts kvnloo #121020 to current main; commit retains kvnloo authorship",
+          "verification": "in-upstream-branch",
+          "sourcePRs": [
+            121020
+          ],
+          "landingPR": 128180
         },
         {
           "sha": "aa58f39576484c89f65296652d246a8b7eb934bb",
@@ -253,6 +271,20 @@
           "sourceCommitSha": "09757f3af1c1b3eec1ccde560089448ffa704c92",
           "evidence": "upstream branch-scoped author-filter",
           "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "94119759c69bdbef43efe229d079ecebedf69106",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/94119759c69bdbef43efe229d079ecebedf69106",
+          "title": "refactor(agent): derive the pruned-args recovery hint from the marker prefix",
+          "at": "2026-09-24T10:59:19Z",
+          "credit": "referenced",
+          "landing": "maintainer-consolidated",
+          "evidence": "Upstream #121421 explicitly salvages the core of kvnloo #120677; verified SHA ancestry on main",
+          "verification": "GitHub compare: zero commits behind upstream main",
+          "sourcePRs": [
+            120677
+          ],
+          "landingPR": 121421
         },
         {
           "sha": "ce2a747be9727085b3a52a097f4cc2e78d210d7c",
@@ -702,9 +734,13 @@
           "title": "fix(desktop): pass --disable-setuid-sandbox on the userns launch path",
           "at": "2026-09-01T09:32:39Z",
           "credit": "author",
-          "landing": "author-attributed",
-          "evidence": "upstream branch-scoped author-filter",
-          "verification": "in-upstream-branch"
+          "landing": "maintainer-consolidated",
+          "evidence": "Upstream #100136 salvages kvnloo #98135 and 4dlt #89349, preserving distinct authorship",
+          "verification": "in-upstream-branch",
+          "sourcePRs": [
+            98135
+          ],
+          "landingPR": 100136
         },
         {
           "sha": "1341dfbd1278a8f36eac16e6e400f96a572abe5f",
@@ -712,9 +748,13 @@
           "title": "fix(compaction): exclude operational notifications from tail anchor and auto-focus (#92703)",
           "at": "2026-08-27T04:38:20Z",
           "credit": "author",
-          "landing": "author-attributed",
-          "evidence": "upstream branch-scoped author-filter",
-          "verification": "in-upstream-branch"
+          "landing": "maintainer-consolidated",
+          "evidence": "Upstream #95980 final salvage wave explicitly records #95173 with kvnloo authorship",
+          "verification": "in-upstream-branch",
+          "sourcePRs": [
+            95173
+          ],
+          "landingPR": 95980
         }
       ]
     },
