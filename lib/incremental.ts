@@ -33,6 +33,21 @@ export function splitDay(from: string, to: string): string | null {
   return new Date(start + Math.floor((end - start) / 2 / 86400000) * 86400000).toISOString().slice(0, 10);
 }
 
+/** Split an inclusive GitHub search range without losing or duplicating seconds. */
+export function splitSecondRange(fromIso: string, toIso: string): [[string, string], [string, string]] | null {
+  const valid = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+  if (!valid.test(fromIso) || !valid.test(toIso)) throw new Error("expected second-precision UTC search bounds");
+  const first = Date.parse(fromIso);
+  const last = Date.parse(toIso);
+  if (!Number.isFinite(first) || !Number.isFinite(last) || first > last) {
+    throw new Error("invalid UTC search bounds");
+  }
+  if (last - first < 1000) return null;
+  const pivot = first + Math.floor((last - first) / 2000) * 1000;
+  const iso = (value: number) => new Date(value).toISOString().replace(".000Z", "Z");
+  return [[iso(first), iso(pivot)], [iso(pivot + 1000), iso(last)]];
+}
+
 
 export function pageIsOlderThan(stamps: (string | null | undefined)[], watermarkIso: string): boolean {
   const watermark = parseArchiveTime(watermarkIso);
