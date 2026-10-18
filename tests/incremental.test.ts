@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { nextDay, pageIsOlderThan, searchDay, splitDay, watermarkFrom } from "../lib/incremental.ts";
+import { nextDay, pageIsOlderThan, searchDay, splitDay, splitSecondRange, watermarkFrom } from "../lib/incremental.ts";
 
 describe("incremental archive window", () => {
   it("backs up two days from the committed high-water mark", () => {
@@ -22,6 +22,28 @@ describe("incremental archive window", () => {
     assert.equal(pageIsOlderThan(["2026-09-08T00:00:00Z", "2026-09-01T00:00:00Z"], "2026-09-09T00:00:00Z"), true);
     assert.equal(pageIsOlderThan(["2026-09-08T00:00:00Z", "2026-09-10T00:00:00Z"], "2026-09-09T00:00:00Z"), false);
     assert.equal(pageIsOlderThan([null, undefined], "2026-09-09T00:00:00Z"), false);
+  });
+
+  it("splits an overloaded two-day window at midnight without overlapping seconds", () => {
+    assert.deepEqual(splitSecondRange("2026-10-17T00:00:00Z", "2026-10-18T23:59:59Z"), [
+      ["2026-10-17T00:00:00Z", "2026-10-17T23:59:59Z"],
+      ["2026-10-18T00:00:00Z", "2026-10-18T23:59:59Z"],
+    ]);
+  });
+
+  it("recursively partitions a saturated single day down to the last second", () => {
+    const halves = splitSecondRange("2026-10-17T00:00:00Z", "2026-10-17T23:59:59Z");
+    assert.deepEqual(halves, [
+      ["2026-10-17T00:00:00Z", "2026-10-17T11:59:59Z"],
+      ["2026-10-17T12:00:00Z", "2026-10-17T23:59:59Z"],
+    ]);
+    assert.deepEqual(splitSecondRange("2026-10-17T23:59:59Z", "2026-10-18T00:00:00Z"), [
+      ["2026-10-17T23:59:59Z", "2026-10-17T23:59:59Z"],
+      ["2026-10-18T00:00:00Z", "2026-10-18T00:00:00Z"],
+    ]);
+    assert.equal(splitSecondRange("2026-10-18T00:00:00Z", "2026-10-18T00:00:00Z"), null);
+    assert.throws(() => splitSecondRange("2026-10-18", "2026-10-19"), /second-precision/);
+    assert.throws(() => splitSecondRange("2026-10-19T00:00:00Z", "2026-10-18T00:00:00Z"), /invalid UTC/);
   });
 
   it("splits a search window so a slice can stay under the 1000-result cap", () => {
