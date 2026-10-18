@@ -42,11 +42,25 @@ Initial v1 endpoints:
 - `/gh-contrib-archive/api/v1/index.json` — schema, freshness, endpoint catalog
 - `/gh-contrib-archive/api/v1/attention.json` — prioritized authored-open-PR queue
 - `/gh-contrib-archive/api/v1/contributions.json` — public-safe contribution archive
+- `/gh-contrib-archive/api/v1/upstream-landings.json` — Omarchy/Hermes upstream SHAs, provenance, and co-author/review credits
 - `/gh-contrib-archive/api/v1/repos.json` — public repository index
 - `/gh-contrib-archive/api/v1/repos/<owner>/<repo>.json` — one repo's cached contribution state
 - `/gh-contrib-archive/api/v1/threads/<owner>/<repo>/<number>.json` — one issue/PR thread shard
 
 These are deliberately projected schemas, **not** arbitrary GitHub API passthrough. New GitHub data families should get explicit public schemas before being exposed.
+
+## Verified upstream landings
+
+`data/upstream-landings.json` tracks **confirmed upstream branch commits**, separate from PR closure states. Omarchy tracks its default `quattro` branch; Hermes tracks `main`. Each SHA is counted once, with distinct **author**, **co-authored**, **review-acknowledged**, and **referenced** credits. The Omarchy maintainer consolidation [#14049](https://github.com/omacom/omarchy/pull/14049) explicitly carries work from [#13209](https://github.com/omacom/omarchy/pull/13209).
+
+To reconcile the snapshot against live GitHub ancestry, run:
+
+```bash
+GH_ARCHIVE_TOKEN=... npm run sync:upstream-landings
+npm run export:api
+```
+
+The rescan is read-only against upstream and only writes the **public** local ledger. API output is whitelist validated. Coverage is explicitly **incomplete** for uncredited rewrites: closed/unmerged PRs are not credited as landed without evidence. No private data or authentication tokens enter tracked JSON.
 
 ## Contribution attention inbox
 
