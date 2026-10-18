@@ -20,7 +20,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "inbox:public-sync": "tsx scripts/public-attention-sync.ts",
     "semantic:refresh": "tsx scripts/gitnexus-semantic.ts",
-    "eval:api": "node --experimental-strip-types scripts/eval-api.ts"
+    "eval:api": "node --experimental-strip-types scripts/eval-api.ts",
+    "sync:upstream-landings": "tsx scripts/sync-upstream-landings.ts"
   },
   "dependencies": {
     "next": "16.3.5",
