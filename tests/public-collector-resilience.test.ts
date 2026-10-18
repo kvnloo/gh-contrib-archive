@@ -49,6 +49,41 @@ process.on("exit", () => fs.writeFileSync("requests.json", JSON.stringify(seen))
 `;
 
 describe("public collector transport and GitHub identities", () => {
+  it("downshifts a persistently failing large GraphQL connection page without losing coverage", () => {
+    const fallbackMock = mock
+      .replace("globalThis.fetch = async input => {", "globalThis.fetch = async (input, init = {}) => {")
+      .replace("seen.push(u.pathname);",
+        "seen.push(u.pathname === '/graphql' ? 'graphql:' + JSON.parse(init.body).variables.pageSize : u.pathname);")
+      .replace("if (u.pathname === \"/graphql\") return Response.json({",
+        "if (u.pathname === \"/graphql\" && JSON.parse(init.body).variables.pageSize > 50) return Response.json({ message: \"large query gateway failure\" }, { status: 502 });\n  if (u.pathname === \"/graphql\") return Response.json({");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "collector-graphql-fallback-"));
+    try {
+      const mockFile = path.join(root, "mock.mjs");
+      const policyFile = path.join(root, "policy.json");
+      fs.writeFileSync(mockFile, fallbackMock);
+      fs.writeFileSync(policyFile, JSON.stringify({ schemaVersion: 1, recentDays: 60, pins: [] }));
+      const result = spawnSync(process.execPath, ["--experimental-strip-types", "--import", mockFile, collector], {
+        cwd: root, encoding: "utf8", timeout: 20_000,
+        env: { ...process.env, GITHUB_TOKEN: "fixture-test-token", GH_TOKEN: "", GH_ARCHIVE_TOKEN: "",
+          GITHUB_PUBLIC_LOGIN: "fixture-self", PUBLIC_ATTENTION_DEEP_LIMIT: "0",
+          PUBLIC_ATTENTION_SEARCH_INTERVAL_MS: "0", PUBLIC_ATTENTION_POLICY: policyFile,
+          PUBLIC_ATTENTION_CACHE: path.join(root, "cache.json") },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const seed = JSON.parse(fs.readFileSync(path.join(root, "data/attention-seed.json"), "utf8"));
+      const requests = JSON.parse(fs.readFileSync(path.join(root, "requests.json"), "utf8"));
+      assert.deepEqual(requests.filter((name: string) => name.startsWith("graphql:")),
+        ["graphql:100", "graphql:100", "graphql:100", "graphql:50"]);
+      assert.equal(seed.coverage.authored.complete, true);
+      assert.equal(seed.coverage.recent.complete, true);
+      assert.equal(seed.coverage.complete, true);
+      assert.equal(seed.items.length, 3);
+      assert.equal(JSON.stringify(seed).includes("large query gateway failure"), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("preserves authenticated GraphQL, retries 502, and accepts public bot/deleted-author rows", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "collector-transport-"));
     try {
