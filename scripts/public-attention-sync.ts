@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { classifyPullRequest, sortAttention } from '../lib/attention.ts';
 
 
@@ -10,7 +11,7 @@ class CollectionError extends Error {
   constructor(code) { super(code); this.name = 'CollectionError'; this.code = code; }
 }
 const validRepo = (s) => typeof s === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(s) && !s.split('/').some(p => p === '.' || p === '..');
-const validLogin = s => typeof s === 'string' && /^[A-Za-z0-9-]{1,39}$/.test(s);
+const validLogin = s => typeof s === 'string' && /^(?:[A-Za-z0-9-]{1,39}|[A-Za-z0-9-]{1,63}\[bot\])$/.test(s);
 const iso = ms => new Date(ms).toISOString().replace('.000Z', 'Z');
 const firstSecond = Date.parse('2008-01-01T00:00:00Z');
 const nowSecond = ms => Math.floor(ms / 1000) * 1000;
@@ -44,42 +45,56 @@ class GithubReader {
   async json(url, { query, variables } = {}) {
     const target = safeApiUrl(url);
     if (query && (target.pathname !== '/graphql' || !/^\s*query\b/.test(query))) throw new CollectionError('read_only_query_required');
-    if (this.stopped) throw new CollectionError(this.stopped);
-    if (this.remaining <= 0) throw new CollectionError('request_budget_exhausted');
-    if (target.pathname === '/search/issues') {
-      if (this.lastSearchAt !== null) await this.sleep(Math.max(0, this.searchIntervalMs - (this.clock() - this.lastSearchAt)));
-      this.lastSearchAt = this.clock();
+    // Every retry spends from the same hard request budget. HTTP 502/503/504
+    // are transient; permission denials fail closed instead of being hidden.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (this.stopped) throw new CollectionError(this.stopped);
+      if (this.remaining <= 0) throw new CollectionError('request_budget_exhausted');
+      if (target.pathname === '/search/issues') {
+        if (this.lastSearchAt !== null) await this.sleep(Math.max(0, this.searchIntervalMs - (this.clock() - this.lastSearchAt)));
+        this.lastSearchAt = this.clock();
+      }
+      this.requests++;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'gh-contrib-archive/covered-read-model', 'X-GitHub-Api-Version': '2022-11-28' };
+        if (this.token) headers.Authorization = `Bearer ${this.token}`;
+        if (query) headers['Content-Type'] = 'application/json';
+        const r = await this.fetchImpl(target.href, { method: query ? 'POST' : 'GET', headers, redirect: 'error', signal: controller.signal, ...(query ? { body: JSON.stringify({ query, variables }) } : {}) });
+        if (!r.ok) {
+          const rateLimited = r.status === 429 || (r.status === 403 && (r.headers.get('x-ratelimit-remaining') === '0' || r.headers.has('retry-after')));
+          const code = rateLimited ? 'rate_limited' : `http_${r.status}`;
+          const retryAfter = r.headers.has('retry-after') ? Number(r.headers.get('retry-after')) : null;
+          const transient = [502, 503, 504].includes(r.status);
+          const shortRateWait = rateLimited && Number.isFinite(retryAfter) && retryAfter >= 0 && retryAfter <= 15;
+          if (attempt < 2 && this.remaining > 0 && (transient || shortRateWait)) {
+            // Retry-After is capped; never sleep for a token reset period inside a build.
+            clearTimeout(timer);
+            await this.sleep(shortRateWait ? Math.max(1000, retryAfter * 1000) : 1000 * (attempt + 1));
+            continue;
+          }
+          if (r.status === 429 || r.status === 403 || r.status === 401) this.stopped = code;
+          throw new CollectionError(code);
+        }
+        if (Number(r.headers.get('content-length')) > this.maxBodyBytes) throw new CollectionError('response_too_large');
+        const chunks = []; let bytes = 0;
+        if (!r.body) throw new CollectionError('empty_response');
+        for await (const chunk of r.body) {
+          bytes += chunk.byteLength;
+          if (bytes > this.maxBodyBytes) { controller.abort(); throw new CollectionError('response_too_large'); }
+          chunks.push(chunk);
+        }
+        let data;
+        try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new CollectionError('invalid_json'); }
+        if (query && data.errors?.length) throw new CollectionError('graphql_error');
+        return { data, next: nextLink(r.headers.get('link'), target.href) };
+      } catch (e) {
+        if (e instanceof CollectionError) throw e;
+        throw new CollectionError(controller.signal.aborted ? 'request_timeout' : 'network_error');
+      } finally { clearTimeout(timer); }
     }
-    this.requests++;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'gh-contrib-archive/covered-read-model', 'X-GitHub-Api-Version': '2022-11-28' };
-      if (this.token) headers.Authorization = `Bearer ${this.token}`;
-      if (query) headers['Content-Type'] = 'application/json';
-      const r = await this.fetchImpl(target.href, { method: query ? 'POST' : 'GET', headers, redirect: 'error', signal: controller.signal, ...(query ? { body: JSON.stringify({ query, variables }) } : {}) });
-      if (!r.ok) {
-        const code = r.status === 429 || (r.status === 403 && (r.headers.get('x-ratelimit-remaining') === '0' || r.headers.has('retry-after'))) ? 'rate_limited' : `http_${r.status}`;
-        // Stop globally rather than multiplying a rate-limit failure across workers.
-        if (r.status === 429 || r.status === 403 || r.status === 401) this.stopped = code;
-        throw new CollectionError(code);
-      }
-      if (Number(r.headers.get('content-length')) > this.maxBodyBytes) throw new CollectionError('response_too_large');
-      const chunks = []; let bytes = 0;
-      if (!r.body) throw new CollectionError('empty_response');
-      for await (const chunk of r.body) {
-        bytes += chunk.byteLength;
-        if (bytes > this.maxBodyBytes) { controller.abort(); throw new CollectionError('response_too_large'); }
-        chunks.push(chunk);
-      }
-      let data;
-      try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new CollectionError('invalid_json'); }
-      if (query && data.errors?.length) throw new CollectionError('graphql_error');
-      return { data, next: nextLink(r.headers.get('link'), target.href) };
-    } catch (e) {
-      if (e instanceof CollectionError) throw e;
-      throw new CollectionError(controller.signal.aborted ? 'request_timeout' : 'network_error');
-    } finally { clearTimeout(timer); }
+    throw new CollectionError('retry_exhausted');
   }
   async collection(url, maxPages = 30) {
     const rows = [], seen = new Set(); let next = safeApiUrl(url).href;
@@ -98,13 +113,14 @@ class GithubReader {
 function projectSearchRow(row) {
   const match = /^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)$/.exec(row?.repository_url ?? '');
   const repo = match?.[1];
-  if (!validRepo(repo) || !Number.isSafeInteger(row.number) || row.number < 1 || !validLogin(row.user?.login) || !['open', 'closed'].includes(row.state)) return null;
+  if (!validRepo(repo) || !Number.isSafeInteger(row.number) || row.number < 1 || !['open', 'closed'].includes(row.state)) return null;
+  const author = validLogin(row.user?.login) ? row.user.login : 'unknown';
   if (row.repository?.private === true || (row.repository?.visibility && row.repository.visibility !== 'public')) return null;
   const isPr = Boolean(row.pull_request);
   const url = `https://github.com/${repo}/${isPr ? 'pull' : 'issues'}/${row.number}`;
-  if (row.html_url !== url || typeof row.title !== 'string' || !Number.isFinite(Date.parse(row.updated_at))) return null;
+  if (typeof row.html_url !== 'string' || row.html_url.toLowerCase() !== url.toLowerCase() || typeof row.title !== 'string' || !Number.isFinite(Date.parse(row.updated_at))) return null;
   return { id: `${repo.toLowerCase()}#${row.number}`, repo, number: row.number, title: row.title.slice(0, 512), url, kind: isPr ? 'pull_request' : 'issue', state: row.state,
-    author: row.user.login, draft: Boolean(row.draft), updatedAt: row.updated_at, commentCount: Number.isSafeInteger(row.comments) ? row.comments : null,
+    author, draft: Boolean(row.draft), updatedAt: row.updated_at, commentCount: Number.isSafeInteger(row.comments) ? row.comments : null,
     reviewDecision: ['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED'].includes(row.reviewDecision) ? row.reviewDecision : null, mergeState: ['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'DRAFT', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'].includes(row.mergeState) ? row.mergeState : null };
 }
 /** Search is capped at 1,000. Split disjoint creation-second intervals before paginating. */
@@ -150,9 +166,18 @@ async function collectSearch(reader, query, { now = Date.now(), start = firstSec
   };
   if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) throw new RangeError('invalid search interval');
   await walk(nowSecond(start), nowSecond(end));
-  const complete = partitions.every(p => p.complete) && items.size === rootReported;
-  return { items: [...items.values()], coverage: { source: 'github-public-search', scope: query, reported: rootReported, fetched: items.size, complete, partitions,
-    reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'search_changed_during_scan' } };
+  // The initial aggregate count is only a diagnostic. A partitioned scan can
+  // legitimately observe new matching rows while it runs. The verified
+  // snapshot is the union of disjoint leaf partitions, each of which is
+  // internally count-stable across its own pagination.
+  const verifiedReported = partitions.reduce(
+    (sum, partition) => sum + (Number.isSafeInteger(partition.reported) ? partition.reported : 0),
+    0,
+  );
+  const complete = partitions.every(p => p.complete) && items.size === verifiedReported;
+  return { items: [...items.values()], coverage: { source: 'github-public-search', scope: query,
+    reported: rootReported, verifiedReported, fetched: items.size, complete, partitions,
+    reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'partition_count_mismatch' } };
 }
 const PR_QUERY = `query($login:String!,$after:String){user(login:$login){pullRequests(first:100,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{number title url state isDraft updatedAt author{login} comments(first:1){totalCount} reviewDecision mergeStateStatus repository{nameWithOwner isPrivate visibility}}}}}`;
 async function collectAuthored(reader, login, { now = Date.now() } = {}) {
@@ -244,7 +269,10 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
     startedAt: new Date(now).toISOString(), recentSince: since, requests: reader.requests } };
 }
 /** Round-robin repos, oldest inspections first. New busy repos cannot starve older ones. */
-function fairRefresh(rows, cache, limit, now, ttlMs = 24 * 3600_000) {
+// Bounded hourly sweeps require enough time to cover the full observed inventory.
+// updatedAt changes invalidate immediately; a 7-day age bound limits undetected drift.
+const FEEDBACK_TTL_MS = 7 * 86400_000;
+function fairRefresh(rows, cache, limit, now, ttlMs = FEEDBACK_TTL_MS) {
   if (!Number.isInteger(limit) || limit < 0 || limit > 1000 || !Number.isFinite(ttlMs) || ttlMs < 1) throw new RangeError('invalid refresh bounds');
   const groups = new Map();
   for (const row of rows) {
@@ -321,7 +349,7 @@ async function readFeedback(reader, root) {
     return { complete: true, activities, events: events.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)), reason: null };
   } catch (e) { return { complete: false, activities, events, reason: e instanceof CollectionError ? e.code : 'feedback_failed' }; }
 }
-async function materializeAttention(reader, work, { classify, sort = rows => rows, login = 'kvnloo', cache = {}, now = Date.now(), deepLimit = 48, ttlMs = 24 * 3600_000, eventLimit = 64, maxCacheBytes = 16 * 1024 * 1024 } = {}) {
+async function materializeAttention(reader, work, { classify, sort = rows => rows, login = 'kvnloo', cache = {}, now = Date.now(), deepLimit = 48, ttlMs = FEEDBACK_TTL_MS, eventLimit = 64, maxCacheBytes = 16 * 1024 * 1024 } = {}) {
   if (!Number.isSafeInteger(maxCacheBytes) || maxCacheBytes < 1024) throw new RangeError('invalid cache byte budget');
   if (!Number.isInteger(eventLimit) || eventLimit < 1 || eventLimit > 512) throw new RangeError('invalid event limit');
   const cleanCache = {};
@@ -337,7 +365,13 @@ async function materializeAttention(reader, work, { classify, sort = rows => row
       const record = conservativeRecord(classify, root, feedback, login);
       entry = { sourceUpdatedAt: root.updatedAt, inspectedAt: new Date(now).toISOString(), complete: feedback.complete, reason: feedback.reason,
         record, events: feedback.events.slice(-eventLimit), eventCount: feedback.events.length };
-      nextCache[root.id] = entry; refreshed++;
+      // Retain only a retry marker after an incomplete read. This advances
+      // round-robin fairness without caching partial feedback as complete.
+      nextCache[root.id] = feedback.complete ? entry : {
+        sourceUpdatedAt: root.updatedAt, inspectedAt: entry.inspectedAt,
+        complete: false, reason: 'retry_pending', record: null, events: [], eventCount: 0,
+      };
+      refreshed++;
     } else if (old?.complete && old.sourceUpdatedAt === root.updatedAt && now - Date.parse(old.inspectedAt) >= 0 && now - Date.parse(old.inspectedAt) < ttlMs) {
       // The current inventory positively observed this public root again.
       entry = old; cacheHits++;
@@ -365,8 +399,14 @@ async function materializeAttention(reader, work, { classify, sort = rows => row
 
 /** Never spread cache data into a public packet. Rebind identity to the current root. */
 function sanitizeCache(entry, root) {
-  if (!entry || entry.complete !== true || entry.sourceUpdatedAt !== root.updatedAt || !Number.isFinite(Date.parse(entry.inspectedAt)) ||
-      !entry.record || entry.record.repo !== root.repo || entry.record.number !== root.number || entry.record.url !== root.url ||
+  if (!entry || entry.sourceUpdatedAt !== root.updatedAt || !Number.isFinite(Date.parse(entry.inspectedAt))) return null;
+  // Incomplete reads only contribute scheduling metadata, never feedback events
+  // or a classification that an agent could mistake for verified coverage.
+  if (entry.complete === false) return {
+    sourceUpdatedAt: root.updatedAt, inspectedAt: entry.inspectedAt,
+    complete: false, reason: 'retry_pending', record: null, events: [], eventCount: 0,
+  };
+  if (entry.complete !== true || !entry.record || entry.record.repo !== root.repo || entry.record.number !== root.number || entry.record.url !== root.url ||
       !Array.isArray(entry.events) || !Number.isSafeInteger(entry.eventCount) || entry.eventCount < entry.events.length) return null;
   const r = entry.record;
   if (!['P0', 'P1', 'P2'].includes(r.priority) || typeof r.blocker !== 'string' || typeof r.nextAction !== 'string') return null;
@@ -391,11 +431,20 @@ function sanitizeCache(entry, root) {
   return { sourceUpdatedAt: root.updatedAt, inspectedAt: entry.inspectedAt, complete: true, reason: null, record, events, eventCount: entry.eventCount };
 }
 
-const cacheFile = path.resolve('.cache/covered-attention.json');
-const seedFile = path.resolve('data/attention-seed.json');
-const coverageFile = path.resolve('data/coverage-seed.json');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const sourceFile = relative => path.join(repoRoot, relative);
+const outputFile = (envName, fallback) => path.resolve(process.env[envName] || fallback);
+const cacheFile = outputFile('PUBLIC_ATTENTION_CACHE', '.cache/covered-attention.json');
+const seedFile = outputFile('PUBLIC_ATTENTION_SEED', 'data/attention-seed.json');
+const coverageFile = outputFile('PUBLIC_ATTENTION_COVERAGE', 'data/coverage-seed.json');
+const policyFile = process.env.PUBLIC_ATTENTION_POLICY
+  ? path.resolve(process.env.PUBLIC_ATTENTION_POLICY)
+  : sourceFile('data/active-repos.json');
 const VERSION = 1;
-const classifierRevision = createHash('sha256').update(fs.readFileSync('lib/attention.ts')).update(fs.readFileSync('scripts/public-attention-sync.ts')).digest('hex');
+const classifierRevision = createHash('sha256')
+  .update(fs.readFileSync(sourceFile('lib/attention.ts')))
+  .update(fs.readFileSync(sourceFile('scripts/public-attention-sync.ts')))
+  .digest('hex');
 const parse = (file: string, fallback: any) => { try { if (fs.statSync(file).size > 32 * 1024 * 1024) return fallback; return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
 const write = (file: string, value: unknown) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -405,10 +454,16 @@ const write = (file: string, value: unknown) => {
 };
 async function main() {
   const now = Date.now();
-  const policy = parse('data/active-repos.json', { recentDays: 60, pins: ['bilawalsidhu/gods-eye-view'] });
+  const policy = parse(policyFile, { recentDays: 60, pins: ['bilawalsidhu/gods-eye-view'] });
   const login = process.env.GITHUB_PUBLIC_LOGIN?.trim() || 'kvnloo';
   const token = process.env.GITHUB_TOKEN || '';
-  const reader = new GithubReader({ token, ...(process.env.PUBLIC_READ_REQUEST_LIMIT ? { requestLimit: Number(process.env.PUBLIC_READ_REQUEST_LIMIT) } : {}) });
+  const reader = new GithubReader({
+    token,
+    ...(process.env.PUBLIC_READ_REQUEST_LIMIT ? { requestLimit: Number(process.env.PUBLIC_READ_REQUEST_LIMIT) } : {}),
+    ...(process.env.PUBLIC_ATTENTION_SEARCH_INTERVAL_MS !== undefined
+      ? { searchIntervalMs: Number(process.env.PUBLIC_ATTENTION_SEARCH_INTERVAL_MS) }
+      : {}),
+  });
   const existing = parse(cacheFile, {});
   const cache = existing.version === VERSION && existing.classifierRevision === classifierRevision && existing.login === login && existing.items && typeof existing.items === 'object' ? existing.items : {};
   const configuredPins = Array.isArray(policy.pins) ? policy.pins : [];
@@ -428,7 +483,16 @@ async function main() {
   write(cacheFile, { version: VERSION, classifierRevision, login, savedAt: observedAt, items: result.cache });
   write(seedFile, seed); write(coverageFile, coverage);
   console.log(JSON.stringify({ inventoryComplete: coverage.complete, feedbackComplete: coverage.feedbackComplete,
-    repositories: work.repositories.length, threads: result.items.length, requests: reader.requests, refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted }));
+    repositories: work.repositories.length, threads: result.items.length, requests: reader.requests,
+    refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted,
+    inventoryDiagnostics: {
+      authored: { complete: work.coverage.authored?.complete === true, reason: work.coverage.authored?.reason ?? null },
+      recent: { complete: work.coverage.recent?.complete === true, reason: work.coverage.recent?.reason ?? null,
+        reported: work.coverage.recent?.reported ?? null, verifiedReported: work.coverage.recent?.verifiedReported ?? null,
+        fetched: work.coverage.recent?.fetched ?? null },
+      unavailablePins: work.coverage.unavailablePins,
+      pinned: work.coverage.pinned?.map(pin => ({ repo: pin.repo, complete: pin.coverage?.complete === true, reason: pin.coverage?.reason ?? null })) ?? [],
+    } }));
 }
 main().catch(() => {
   // Never print provider errors, tokens, private names, or retain a fresh-looking fallback.

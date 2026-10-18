@@ -59,7 +59,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_INBOX_TOKEN || github.token }}
           PUBLIC_READ_REQUEST_LIMIT: "220"
           PUBLIC_ATTENTION_DEEP_LIMIT: "48"
+          PUBLIC_ATTENTION_SEARCH_INTERVAL_MS: "4000"
         run: npm run inbox:public-sync
+
+      - name: Persist verified covered-inbox progress
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/covered-attention.json
+          key: covered-attention-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - id: unit
         run: npm test
@@ -75,9 +83,19 @@ jobs:
           const read = (name) => JSON.parse(fs.readFileSync(`${root}/${name}`, "utf8"));
           const index = read("index.json");
           const attention = read("attention.json");
+          const repos = read("repos.json");
+          const archiveManifest = JSON.parse(fs.readFileSync("out/data/manifest.json", "utf8"));
           if (index.coverage?.source !== "covered-public-inventory") throw new Error("covered collector not authoritative");
           if (index.coverage?.inventoryComplete !== true) throw new Error("inventory is incomplete; refusing publication");
           if (attention.coverage?.inventoryComplete !== true) throw new Error("attention coverage is incomplete");
+          if (repos.count !== archiveManifest.counts?.repos) {
+            throw new Error(`repo materialization mismatch: api=${repos.count} archive=${archiveManifest.counts?.repos}`);
+          }
+          for (const row of repos.repos ?? []) {
+            if (typeof row.href !== "string" || !fs.existsSync(`${root}/${row.href}`)) {
+              throw new Error(`missing materialized repo context: ${row.repo ?? "unknown"}`);
+            }
+          }
           const gev = `${root}/repos/bilawalsidhu/gods-eye-view.json`;
           if (!fs.existsSync(gev)) throw new Error("GEV is missing from covered repository materialization");
           const repo = JSON.parse(fs.readFileSync(gev, "utf8"));
@@ -89,6 +107,8 @@ jobs:
           console.log(JSON.stringify({
             dataCommit: process.env.PUBLIC_ARCHIVE_COMMIT,
             coveredRepos: index.coverage.activeRepos?.length ?? null,
+            materializedRepos: repos.count,
+            archiveRepos: archiveManifest.counts?.repos ?? null,
             attentionRows: attention.count,
             gevRows: repo.attention.length,
             coreBytes: Object.fromEntries(largest),
@@ -153,15 +173,21 @@ jobs:
               try:
                   with urllib.request.urlopen(base + "/api/v1/index.json", timeout=10) as r:
                       index = json.load(r)
+                  with urllib.request.urlopen(base + "/api/v1/repos.json", timeout=10) as r:
+                      repos = json.load(r)
+                  with urllib.request.urlopen(base + "/data/manifest.json", timeout=10) as r:
+                      manifest = json.load(r)
                   with urllib.request.urlopen(base + "/api/v1/repos/bilawalsidhu/gods-eye-view.json", timeout=10) as r:
                       gev = json.load(r)
                   if index.get("coverage", {}).get("source") != "covered-public-inventory":
                       raise RuntimeError("deployed index is not the covered collector")
                   if index.get("coverage", {}).get("inventoryComplete") is not True:
                       raise RuntimeError("deployed inventory is incomplete")
+                  if repos.get("count") != manifest.get("counts", {}).get("repos"):
+                      raise RuntimeError("deployed repo materialization does not cover the archive")
                   if not gev.get("attention"):
                       raise RuntimeError("deployed GEV inbox is empty")
-                  print(json.dumps({"revision": index.get("revision"), "gevRows": len(gev["attention"])}))
+                  print(json.dumps({"revision": index.get("revision"), "materializedRepos": repos.get("count"), "gevRows": len(gev["attention"])}))
                   break
               except Exception as exc:
                   error = exc

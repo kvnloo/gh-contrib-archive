@@ -1,0 +1,69 @@
+name: Reconcile upstream landings
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 5 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-landings-sync
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.repository == 'kvnloo/gh-contrib-archive'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nightly
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify upstream and rebuild public ledger
+        env:
+          GH_ARCHIVE_TOKEN: ${{ secrets.GH_ARCHIVE_TOKEN }}
+        run: |
+          if [ -z "$GH_ARCHIVE_TOKEN" ]; then
+            echo "GH_ARCHIVE_TOKEN required for complete GitHub pagination and ancestry checks" >&2
+            exit 1
+          fi
+          npm run sync:upstream-landings
+      - run: npm test
+      - name: Propose changes to preview without duplicate PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/upstream-landings.json; then
+            echo "No new upstream landings"
+            exit 0
+          fi
+
+          # Do not overwrite a pending review; avoid repeated duplicate PRs.
+          existing=$(gh pr list --state open --base preview --limit 100 \
+            --json title,headRefName --jq \
+            '[.[] | select(.title == "data: refresh verified upstream landings")] | .[0].headRefName // ""')
+          if [ -n "$existing" ]; then
+            echo "Review already pending on $existing; not creating a second PR"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          branch="sync/upstream-landings-$GITHUB_RUN_ID"
+          git switch -c "$branch"
+          git add -- data/upstream-landings.json
+          git commit -m "data: refresh verified upstream landings"
+          git push origin "$branch"
+          gh pr create --base preview --head "$branch" \
+            --title "data: refresh verified upstream landings" \
+            --body "Automated, read-only upstream reconciliation. Each SHA is verified on its upstream branch. Source credit distinguishes authorship from review acknowledgment. No production merge or unreviewed data promotion."

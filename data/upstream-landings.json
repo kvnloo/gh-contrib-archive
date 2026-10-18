@@ -1,0 +1,751 @@
+{
+  "schemaVersion": 1,
+  "privacy": "public-safe",
+  "subject": "kvnloo",
+  "verifiedOn": "2026-10-18",
+  "semanticNote": "A merged source PR and an upstream commit are different objects. Each SHA counts once; review acknowledgements are not code authorship.",
+  "repositories": {
+    "NousResearch/hermes-agent": {
+      "upstreamBranch": "main",
+      "verifiedHead": "d24fe22029c9d42dd7cd3702df4c02b1e92b9506",
+      "branchUrl": "https://github.com/NousResearch/hermes-agent/tree/main",
+      "coverage": {
+        "complete": false,
+        "method": "branch-scoped authored commits plus explicit commit-message credit and SHA ancestry",
+        "limitations": [
+          "Uncredited rewritten or independently implemented fixes require patch-level review",
+          "Commit-message searches are not guaranteed exhaustive beyond GitHub search limits"
+        ]
+      },
+      "commits": [
+        {
+          "sha": "56fe13344021ee3737c3a9b47a74a73fc199b8e0",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/56fe13344021ee3737c3a9b47a74a73fc199b8e0",
+          "title": "test(compression): pin complete main fallback route",
+          "at": "2026-10-16T21:18:50Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "65c82853ab05454f24de9914a8fbf8f184f235ff",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/65c82853ab05454f24de9914a8fbf8f184f235ff",
+          "title": "fix(auxiliary): support complete route overrides",
+          "at": "2026-10-16T21:18:50Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "fa400df525be8b01f49eaa161d5e44b9019ac245",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/fa400df525be8b01f49eaa161d5e44b9019ac245",
+          "title": "fix(compression): suppress failed route inheritance",
+          "at": "2026-10-16T21:18:50Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "9a3a745ad21d123a790f4e640a6e2543b272bba7",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/9a3a745ad21d123a790f4e640a6e2543b272bba7",
+          "title": "test: record independent post-admission compression loss",
+          "at": "2026-10-11T17:27:06Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "c72f4fa1ddee1ae8e048f5193ebccae2670ffb17",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/c72f4fa1ddee1ae8e048f5193ebccae2670ffb17",
+          "title": "fix(desktop): edit asks before a deep cut; a server 4033 asks once and retries",
+          "at": "2026-10-11T12:14:05.000+05:30",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "097fcaa1deec1903ece5abce8919c9937a57f3f4",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/097fcaa1deec1903ece5abce8919c9937a57f3f4",
+          "title": "fix(skills): every turn announces skill changes once, on every surface",
+          "at": "2026-10-09T19:31:10.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "cf0755f947ee35c7b3f3c456fb744b0cffdacf79",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/cf0755f947ee35c7b3f3c456fb744b0cffdacf79",
+          "title": "fix(code-health): occurrence provenance, alias-aware rules, strict file cap (round 4)",
+          "at": "2026-10-04T21:29:39.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "44a1ce9724502b9c692faaef00af3054bf11f1a6",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/44a1ce9724502b9c692faaef00af3054bf11f1a6",
+          "title": "test(desktop): pin the preview URL scheme boundary",
+          "at": "2026-10-01T11:56:40.000-04:00",
+          "credit": "referenced",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "ebba2ac7355866dc61652499abc199e837d51a37",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/ebba2ac7355866dc61652499abc199e837d51a37",
+          "title": "fix(desktop): migrate in-flight turn journal across stored-id rotation",
+          "at": "2026-10-01T01:50:16.000-05:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "4b3cbf8c60bbac4a0d6eb3b97cd64add629e194c",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/4b3cbf8c60bbac4a0d6eb3b97cd64add629e194c",
+          "title": "fix(desktop): STT filter trailing strip + live barge-in disarm (#127275)",
+          "at": "2026-09-30T23:49:04.000-05:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "3632f9173d218fd24f3fa595d7affa159b0774cd",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/3632f9173d218fd24f3fa595d7affa159b0774cd",
+          "title": "fix(desktop): keep native Wayland fullscreen windows painting",
+          "at": "2026-09-29T23:51:10Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "aa58f39576484c89f65296652d246a8b7eb934bb",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/aa58f39576484c89f65296652d246a8b7eb934bb",
+          "title": "fix(desktop): scope fullscreen paint workaround to native Wayland",
+          "at": "2026-09-29T23:51:10Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "dac2afc96e444f85c2b4927d979b796df92c76d3",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/dac2afc96e444f85c2b4927d979b796df92c76d3",
+          "title": "test(desktop): pin Wayland fullscreen throttle lifetime",
+          "at": "2026-09-29T23:51:10Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "b7bb7685d31c5a1cbaf9a3cb7bde1c063cda6f5f",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/b7bb7685d31c5a1cbaf9a3cb7bde1c063cda6f5f",
+          "title": "fix: log missing successor evidence for a planned gateway",
+          "at": "2026-09-29T21:50:16.000-05:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "835501f92f008fb73e9ef1e254b6d3eb092e71e1",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/835501f92f008fb73e9ef1e254b6d3eb092e71e1",
+          "title": "fix(desktop): keep a streamed reply over an empty committed tool shell",
+          "at": "2026-09-28T21:05:52.000-04:00",
+          "credit": "referenced",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "d619b67ec2d4b0f06a4496ddd4619aa732ac2beb",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/d619b67ec2d4b0f06a4496ddd4619aa732ac2beb",
+          "title": "fix(local-runtime): spill only the recurrent FFN blocks a hybrid needs",
+          "at": "2026-09-28T21:02:39.000-04:00",
+          "credit": "referenced",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "97065356c84d100076662cc7d13e7b017088d535",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/97065356c84d100076662cc7d13e7b017088d535",
+          "title": "fix(desktop): keep model rows clickable before pointer movement",
+          "at": "2026-09-27T13:51:26Z",
+          "credit": "author",
+          "landing": "direct-merged-pr",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch",
+          "sourcePRs": [
+            123069
+          ],
+          "landingPR": 123069
+        },
+        {
+          "sha": "0ebaf162cc827a805972f49485112197a3ce89e2",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/0ebaf162cc827a805972f49485112197a3ce89e2",
+          "title": "fix(kanban): run clock ticks from the current run, not the task's first start",
+          "at": "2026-09-26T21:51:19Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "81561552f2af87661b1dd3a7ab6e13b1aec19676",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/81561552f2af87661b1dd3a7ab6e13b1aec19676",
+          "title": "refactor(agent): check pruned tool args once, after plugin arg rewrites",
+          "at": "2026-09-24T16:29:19.000+05:30",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "b73e408b74f1cd06548800ac3a2282f45e130f25",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/b73e408b74f1cd06548800ac3a2282f45e130f25",
+          "title": "test(agent): trim pruned-arg guard tests to two invariants",
+          "at": "2026-09-24T16:29:19.000+05:30",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "b8a1bf759ec25f5f30177ef0000e0a54b6c0c185",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/b8a1bf759ec25f5f30177ef0000e0a54b6c0c185",
+          "title": "refactor(agent): drop legacy '...[truncated]' tail from pruned-arg detector",
+          "at": "2026-09-24T16:29:19.000+05:30",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "30b607480243f9fb9f3c5d96f03beea01fedfa36",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/30b607480243f9fb9f3c5d96f03beea01fedfa36",
+          "title": "test(agent): pin compression marker side-effect boundary",
+          "at": "2026-09-24T10:59:19Z",
+          "credit": "author",
+          "landing": "cherry-picked",
+          "sourceCommitSha": "584f4204c8a3b681afde0a168da93ecf6ac5ccaf",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "459b3ee6cdcd9021dd3cdf33f9b2c01cc5820982",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/459b3ee6cdcd9021dd3cdf33f9b2c01cc5820982",
+          "title": "fix(agent): detect copied context-compression artifacts",
+          "at": "2026-09-24T10:59:19Z",
+          "credit": "author",
+          "landing": "cherry-picked",
+          "sourceCommitSha": "09757f3af1c1b3eec1ccde560089448ffa704c92",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "ce2a747be9727085b3a52a097f4cc2e78d210d7c",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/ce2a747be9727085b3a52a097f4cc2e78d210d7c",
+          "title": "fix(agent): block pruned content before effectful dispatch",
+          "at": "2026-09-24T10:59:19Z",
+          "credit": "author",
+          "landing": "cherry-picked",
+          "sourceCommitSha": "ff9acb30510389561a2706653ad9f7f2aef99895",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "51ff85255af8597f347fda7b2434306825390bbc",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/51ff85255af8597f347fda7b2434306825390bbc",
+          "title": "fix(desktop): reload language for the active profile and connection",
+          "at": "2026-09-23T22:17:54Z",
+          "credit": "author",
+          "landing": "cherry-picked",
+          "sourceCommitSha": "b6ccdcf8327c516668962d480a272a424d035d5d",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "68f81c4fae0b11bb82c497d2643226e8f348d404",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/68f81c4fae0b11bb82c497d2643226e8f348d404",
+          "title": "fix(bot-mode): sync renamed profile names and handles in existing group chats",
+          "at": "2026-09-20T17:29:54Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "b7454a828db6b78adf2ec7ab3a3247d5d6ac404e",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/b7454a828db6b78adf2ec7ab3a3247d5d6ac404e",
+          "title": "fix(bot-mode): live mention variants outrank previous-name aliases",
+          "at": "2026-09-20T17:29:54Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "bc1589231593a30eab7a5cd72ea65b401edb1f15",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/bc1589231593a30eab7a5cd72ea65b401edb1f15",
+          "title": "chore: trim comment blocks to repo style",
+          "at": "2026-09-20T17:29:54Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "4e1edd9220534407fcdd2e8106669a509630eda5",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/4e1edd9220534407fcdd2e8106669a509630eda5",
+          "title": "fix: correct indentation of repaired['required'] assignment",
+          "at": "2026-09-19T10:16:59.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "84861b187bd1b55361536423014a1cfad1c1db3e",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/84861b187bd1b55361536423014a1cfad1c1db3e",
+          "title": "test: add regression test for required array filtering in _repair_object_shape",
+          "at": "2026-09-19T10:16:59.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "1131fd56c26ac58965064349e86624d0f5e8a572",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/1131fd56c26ac58965064349e86624d0f5e8a572",
+          "title": "fix(cron): reap stale executions before the one-shot early return",
+          "at": "2026-09-18T18:07:56Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "1e13e576099b89092e736cf3e23bad5ec21b46ea",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/1e13e576099b89092e736cf3e23bad5ec21b46ea",
+          "title": "docs(claude-code): permission prompts are the default flow; bypass is an opt-in",
+          "at": "2026-09-18T16:27:35Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "f7142276af71e9e3c0c12f5ebc701f8c7980cd4c",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/f7142276af71e9e3c0c12f5ebc701f8c7980cd4c",
+          "title": "docs(skills): drop platforms heartmula and tensorrt-llm cannot run on",
+          "at": "2026-09-18T16:25:26Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "eb28bc1bf7e91963db49b147a008b1c9fe7276ac",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/eb28bc1bf7e91963db49b147a008b1c9fe7276ac",
+          "title": "fix(kanban): host spawn refusals stop charging cards; oneshot-unit dispatch scope-wraps workers",
+          "at": "2026-09-18T10:21:42.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "0ecf2d2ff1938cbc0b31132c257cc8fedf39cc4c",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/0ecf2d2ff1938cbc0b31132c257cc8fedf39cc4c",
+          "title": "fix(teams): match the bot's `28:` wire id, keep extras on the instance, trim to two invariant tests",
+          "at": "2026-09-18T09:55:55.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "46500f9c7985aa7abcf46622d42f16dca6f7e584",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/46500f9c7985aa7abcf46622d42f16dca6f7e584",
+          "title": "fix(dashboard): --stop and the update sweep resolve backend ownership tri-state, never guess",
+          "at": "2026-09-18T09:38:01.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "8e1b4216b5b1ced1a9775961c389c7029a4bf1f0",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/8e1b4216b5b1ced1a9775961c389c7029a4bf1f0",
+          "title": "fix(cli): startup auth fallback re-resolves reasoning effort through the CLI chokepoint",
+          "at": "2026-09-18T09:35:49.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "8b9c0b63e78b32932c4aa948537c30c468f726fe",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/8b9c0b63e78b32932c4aa948537c30c468f726fe",
+          "title": "fix(config): save_config takes explicit paths from the fail-closed read",
+          "at": "2026-09-17T21:19:47.000+05:30",
+          "credit": "referenced",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "010a45097e49fff00c32db954f56a2f9d6d08f17",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/010a45097e49fff00c32db954f56a2f9d6d08f17",
+          "title": "fix(web): per-capability backend key no longer reroutes the other capability",
+          "at": "2026-09-17T00:43:40Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "8ff91f6ac388db8ce324b3788f3688135ca0288b",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/8ff91f6ac388db8ce324b3788f3688135ca0288b",
+          "title": "fix(whatsapp-bridge): bump body-parser override pin to 1.20.8",
+          "at": "2026-09-17T00:11:23Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "e82adb7d9ba96adc311111e791c9271a7e4f671c",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/e82adb7d9ba96adc311111e791c9271a7e4f671c",
+          "title": "fix(desktop): keep transcript selection when pointer moves over a composer surface",
+          "at": "2026-09-17T00:04:28Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "ca396e0f7f0412b4d40c34b4aaacd7813f5721f0",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/ca396e0f7f0412b4d40c34b4aaacd7813f5721f0",
+          "title": "fix(desktop): track plugin gateway listeners in the bundled loader and ctx.onEvent",
+          "at": "2026-09-16T17:46:28.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "680735174a097eb036d0c69546650fa0e6af10a3",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/680735174a097eb036d0c69546650fa0e6af10a3",
+          "title": "fix(gateway): scheduled heartbeats end silently, emit no progress and quote no stale message",
+          "at": "2026-09-16T17:23:01.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "b2d80bfba4fc3b570a776c4185da108aff117d23",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/b2d80bfba4fc3b570a776c4185da108aff117d23",
+          "title": "fix(desktop): guard every focus-follow branch, not only pointermove",
+          "at": "2026-09-16T17:04:28.000-07:00",
+          "credit": "referenced",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "a09195b1e8d232e8c83b5430da4261970f62a820",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/a09195b1e8d232e8c83b5430da4261970f62a820",
+          "title": "fix(messaging): dual-live and cross-profile invariants for the served-profile card",
+          "at": "2026-09-16T10:27:34.000-07:00",
+          "credit": "referenced",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "505b36b7afc6a746cfd9b4ee3f4b04b82354d12d",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/505b36b7afc6a746cfd9b4ee3f4b04b82354d12d",
+          "title": "fix(platforms): make QR fallback install tip target the active interpreter",
+          "at": "2026-09-16T01:55:47Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "3fe8e5e443d1c30843296679e86d90f335aa1269",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/3fe8e5e443d1c30843296679e86d90f335aa1269",
+          "title": "fix(multiplex): routed children never inherit launch-only credentials, with or without the multiplex flag",
+          "at": "2026-09-16T00:35:00.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "86097433893b392e5e963430032950ce0902d749",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/86097433893b392e5e963430032950ce0902d749",
+          "title": "fix(serve): launch-profile scope decided at entry; send keeps scope authority; per-reset release",
+          "at": "2026-09-16T00:35:00.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "92d64465bf2560e7c4d5f715f0b656c2139d0de0",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/92d64465bf2560e7c4d5f715f0b656c2139d0de0",
+          "title": "docs(multiplex): routed-child credential rule and the frozen launch env restart requirement",
+          "at": "2026-09-16T00:35:00.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "db54f5448d7cd13dda34630564153e2edadcfe63",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/db54f5448d7cd13dda34630564153e2edadcfe63",
+          "title": "fix(kanban): worker fingerprint carries a boot witness; an uncaptured fingerprint never authorizes a signal",
+          "at": "2026-09-16T00:35:00.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "71aa0d635e3fe6b752e7345722f0acf945ccc641",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/71aa0d635e3fe6b752e7345722f0acf945ccc641",
+          "title": "fix: setup gateway skips the standalone service for a multiplex-served profile",
+          "at": "2026-09-15T18:27:35.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "66c9440826c261dd3592c9dab4276b3244e5a25d",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/66c9440826c261dd3592c9dab4276b3244e5a25d",
+          "title": "fix: stream retry no longer replays the old model on the switched-to provider",
+          "at": "2026-09-15T18:21:17.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "d54ae026066cf3682b23b6512f8bc2f9a94ced75",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/d54ae026066cf3682b23b6512f8bc2f9a94ced75",
+          "title": "fix(pricing): custom-provider /models prices already per-million are no longer inflated 1e6x",
+          "at": "2026-09-15T18:20:51.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "9b3042902e2f8074b0f81ea771d33c842ccbd853",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/9b3042902e2f8074b0f81ea771d33c842ccbd853",
+          "title": "fix: trim hygiene bound salvage to two invariant tests and document the knob",
+          "at": "2026-09-15T18:18:58.000-07:00",
+          "credit": "co-authored",
+          "landing": "credited-upstream",
+          "evidence": "upstream co-authored-by trailer",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "40b22806f88752cba202c6ab531eb0d94355a11e",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/40b22806f88752cba202c6ab531eb0d94355a11e",
+          "title": "fix(cli): preserve image attachments when re-queueing interrupt messages",
+          "at": "2026-09-15T13:36:55Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "b797e9d7b3ceffd6a2ad4dfa230d412ddc4a7fe5",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/b797e9d7b3ceffd6a2ad4dfa230d412ddc4a7fe5",
+          "title": "fix(config): detect file replacements in stat-based cache signatures",
+          "at": "2026-09-15T13:29:50Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "48bcdf94e949a182b644ca65195bd4fd4acb8179",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/48bcdf94e949a182b644ca65195bd4fd4acb8179",
+          "title": "fix(kanban): stale-claim reclaim advances consecutive_failures",
+          "at": "2026-09-15T13:06:32Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "7d292af8756f489f6989e2f9568f0a09f1f92bb6",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/7d292af8756f489f6989e2f9568f0a09f1f92bb6",
+          "title": "fix(journey): show foreground-created skills in /journey via learn provenance marker",
+          "at": "2026-09-15T12:38:31Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "5724cb3002354dcd2e29d8c46a457ba7a61b169c",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/5724cb3002354dcd2e29d8c46a457ba7a61b169c",
+          "title": "fix(desktop): kill hung remote SSH probes via a POSIX remote watchdog",
+          "at": "2026-09-15T12:18:28Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "cef69276ae3a32d95b291c55a7db0eafae13f61d",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/cef69276ae3a32d95b291c55a7db0eafae13f61d",
+          "title": "fix(gateway): hold startup-watchdog progress leases across state.db auto-maintenance",
+          "at": "2026-09-15T11:19:19Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "59a1403fa2895950ce68302c96d3384d3adb9e98",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/59a1403fa2895950ce68302c96d3384d3adb9e98",
+          "title": "fix(cron): mask inert heredoc bodies before the referenced-script walk",
+          "at": "2026-09-15T11:00:34Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "ff8f725c5ac6ef37a1ca908d264845e3916b6997",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/ff8f725c5ac6ef37a1ca908d264845e3916b6997",
+          "title": "fix(kanban): attribute synthesized review-handoff run to the implementer",
+          "at": "2026-09-15T10:51:28Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "2d46af3fa2dccd757663b30898768805656cd54d",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/2d46af3fa2dccd757663b30898768805656cd54d",
+          "title": "fix(kanban): per-home dispatch claim allowlist for shared boards",
+          "at": "2026-09-15T10:33:53Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "7ef0b98272f59f5949d701cd510693b7f7850509",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/7ef0b98272f59f5949d701cd510693b7f7850509",
+          "title": "fix(tools): honor multiplexed per-turn HERMES_HOME in execute_code child env",
+          "at": "2026-09-14T23:13:51Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "9326d9cdc4f4d64dd35bbf332243fc9bbd0267f0",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/9326d9cdc4f4d64dd35bbf332243fc9bbd0267f0",
+          "title": "fix(bot-mode): show the current thread and newest unresolved failure",
+          "at": "2026-09-14T17:35:04.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "8698834e07e4cce8d925c36f2fa93859f47f5037",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/8698834e07e4cce8d925c36f2fa93859f47f5037",
+          "title": "fix(bot-screen): fence lease epoch before the device op",
+          "at": "2026-09-12T19:00:05.000-07:00",
+          "credit": "review-acknowledged",
+          "landing": "credited-upstream",
+          "evidence": "upstream commit message mentions kvnloo",
+          "verification": "GitHub compare: zero commits behind upstream branch"
+        },
+        {
+          "sha": "64a7c0aa8a3f0701754f9cb828b91e6c98b536c1",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/64a7c0aa8a3f0701754f9cb828b91e6c98b536c1",
+          "title": "chore: map contributor emails",
+          "at": "2026-09-01T09:32:39Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "779482598f45f3d0ce0a1bb76d062c341b33a47a",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/779482598f45f3d0ce0a1bb76d062c341b33a47a",
+          "title": "fix(desktop): pass --disable-setuid-sandbox on the userns launch path",
+          "at": "2026-09-01T09:32:39Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        },
+        {
+          "sha": "1341dfbd1278a8f36eac16e6e400f96a572abe5f",
+          "url": "https://github.com/NousResearch/hermes-agent/commit/1341dfbd1278a8f36eac16e6e400f96a572abe5f",
+          "title": "fix(compaction): exclude operational notifications from tail anchor and auto-focus (#92703)",
+          "at": "2026-08-27T04:38:20Z",
+          "credit": "author",
+          "landing": "author-attributed",
+          "evidence": "upstream branch-scoped author-filter",
+          "verification": "in-upstream-branch"
+        }
+      ]
+    },
+    "omacom/omarchy": {
+      "upstreamBranch": "quattro",
+      "verifiedHead": "da2db1a2fe022089165b9edca3326886ad78dae2",
+      "branchUrl": "https://github.com/omacom/omarchy/tree/quattro",
+      "coverage": {
+        "complete": false,
+        "method": "branch-scoped authored commits plus explicit commit-message credit and SHA ancestry",
+        "limitations": [
+          "Uncredited rewritten or independently implemented fixes require patch-level review",
+          "Commit-message searches are not guaranteed exhaustive beyond GitHub search limits"
+        ]
+      },
+      "commits": [
+        {
+          "sha": "75250d37acdf19121efe2af85b3732b8cf248980",
+          "url": "https://github.com/omacom/omarchy/commit/75250d37acdf19121efe2af85b3732b8cf248980",
+          "title": "Fix Codex limits, Claude counting, and agent usage reliability from community PRs (#14049)",
+          "at": "2026-10-02T22:03:07.000-04:00",
+          "credit": "co-authored",
+          "landing": "maintainer-consolidated",
+          "evidence": "Upstream #14049 names source #13209 and co-authors Kevin Rajan",
+          "verification": "GitHub compare: zero commits behind upstream branch",
+          "sourcePRs": [
+            13209
+          ],
+          "landingPR": 14049
+        }
+      ]
+    }
+  }
+}
