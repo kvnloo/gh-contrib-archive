@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { PUBLIC_DB_PATH, openDb } from "../lib/db.ts";
-import { nextDay, pageIsOlderThan, searchDay, splitDay, watermarkFrom } from "../lib/incremental.ts";
+import { nextDay, pageIsOlderThan, searchDay, splitDay, splitSecondRange, watermarkFrom } from "../lib/incremental.ts";
 import { excerptOf, flagContribution } from "../lib/sanity.ts";
 
 const LOGIN = process.env.GH_LOGIN ?? "kvnloo";
@@ -188,6 +188,26 @@ async function searchCount(query: string) {
   return json.data.search.issueCount;
 }
 
+/** Fall back to second-precision partitions when a single day is saturated. */
+async function searchIssuesSecondWindow(
+  db: DatabaseSync,
+  type: "pull_request" | "issue",
+  fromIso: string,
+  toIso: string,
+) {
+  const kind = type === "pull_request" ? "is:pr" : "is:issue";
+  const query = `author:${LOGIN} ${kind} updated:${fromIso}..${toIso}`;
+  const count = await searchCount(query);
+  console.log(`${type} ${fromIso}..${toIso}: ${count}`);
+  if (count > 800) {
+    const halves = splitSecondRange(fromIso, toIso);
+    if (!halves) throw new Error(`${query} has ${count} results in a single second; refusing truncation`);
+    for (const [lo, hi] of halves) await searchIssuesSecondWindow(db, type, lo, hi);
+    return;
+  }
+  if (count > 0) await searchIssues(db, query, type);
+}
+
 async function searchIssuesWindow(
   db: DatabaseSync,
   type: "pull_request" | "issue",
@@ -200,7 +220,10 @@ async function searchIssuesWindow(
   console.log(`${type} ${fromDay}..${toDay}: ${count}`);
   if (count > 800) {
     const mid = splitDay(fromDay, toDay);
-    if (!mid) throw new Error(`${query} has ${count} results and cannot be split under the search cap`);
+    if (!mid) {
+      await searchIssuesSecondWindow(db, type, `${fromDay}T00:00:00Z`, `${toDay}T23:59:59Z`);
+      return;
+    }
     await searchIssuesWindow(db, type, fromDay, mid);
     await searchIssuesWindow(db, type, nextDay(mid), toDay);
     return;
