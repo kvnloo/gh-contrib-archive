@@ -109,7 +109,7 @@ async function onBranch(repo: string, sha: string, branch: string): Promise<bool
   const compare = await json<{
     status: string;
     behind_by: number;
-  }>("/repos/" + repo + "/compare/" + sha + "..." + encodeURIComponent(branch));
+  }>("/repos/" + repo + "/compare/" + sha + "..." + encodeURIComponent(branch) + "?per_page=1");
   return compare.behind_by === 0 &&
     (compare.status === "ahead" || compare.status === "identical");
 }
@@ -188,6 +188,17 @@ async function main() {
     console.log(repo + ": " + commits.length + " verified upstream SHAs");
   }
   const publicSafe = projectPublicUpstreamLandings(updated);
+  // Main/quattro advance constantly. Only create a review PR for newly landed
+  // contributions or corrected provenance, not a changed snapshot head/date.
+  const changed = TRACKED_UPSTREAM_REPOS.some((repo) => {
+    const a = publicSafe.repositories[repo].commits;
+    const b = previous.repositories[repo].commits;
+    return JSON.stringify(a) !== JSON.stringify(b);
+  });
+  if (!changed) {
+    console.log("No changes to landed contributions; preserving tracked snapshot");
+    return;
+  }
   const next = JSON.stringify(publicSafe, null, 2) + "\n";
   const old = fs.readFileSync(inputPath, "utf8");
   if (checkOnly) {
