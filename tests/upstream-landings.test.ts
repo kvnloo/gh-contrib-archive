@@ -36,6 +36,18 @@ describe("verified upstream landings", () => {
       hermes.commits.length,
     );
     assert.ok(hermes.commits.some((entry) => entry.credit === "review-acknowledged"));
+    // Merged maintainer PRs sometimes carry the source PR only in PR metadata.
+    const compressed = hermes.commits.find(
+      (entry) => entry.sha === "4498a4cf90932283d69382eee09156880c7121e5",
+    );
+    assert.equal(compressed?.landingPR, 139872);
+    assert.deepEqual(compressed?.sourcePRs, [130895]);
+    assert.equal(compressed?.credit, "referenced");
+    const marker = hermes.commits.find(
+      (entry) => entry.sha === "94119759c69bdbef43efe229d079ecebedf69106",
+    );
+    assert.equal(marker?.landingPR, 121421);
+    assert.deepEqual(marker?.sourcePRs, [120677]);
   });
 
   it("rejects private repo injection even when labeled public-safe", () => {
