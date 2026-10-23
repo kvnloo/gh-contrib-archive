@@ -77,20 +77,22 @@ jobs:
 
       - name: Verify covered inbox before publication
         run: |
-          node --input-type=module - <<'NODE'
+          node --experimental-strip-types --input-type=module - <<'NODE'
           import fs from "node:fs";
+          import { verifyRepoCoverage } from "./scripts/verify-repo-coverage.ts";
           const root = "out/api/v1";
           const read = (name) => JSON.parse(fs.readFileSync(`${root}/${name}`, "utf8"));
           const index = read("index.json");
           const attention = read("attention.json");
           const repos = read("repos.json");
           const archiveManifest = JSON.parse(fs.readFileSync("out/data/manifest.json", "utf8"));
+          const archive = JSON.parse(fs.readFileSync("out/data/archive.json", "utf8"));
           if (index.coverage?.source !== "covered-public-inventory") throw new Error("covered collector not authoritative");
           if (index.coverage?.inventoryComplete !== true) throw new Error("inventory is incomplete; refusing publication");
           if (attention.coverage?.inventoryComplete !== true) throw new Error("attention coverage is incomplete");
-          if (repos.count !== archiveManifest.counts?.repos) {
-            throw new Error(`repo materialization mismatch: api=${repos.count} archive=${archiveManifest.counts?.repos}`);
-          }
+          // Public attention can discover repos not present in the historical archive.
+          // Verify every archived repo still has a materialized context instead of requiring equal counts.
+          const repoCoverage = verifyRepoCoverage(repos, archive, archiveManifest);
           for (const row of repos.repos ?? []) {
             if (typeof row.href !== "string" || !fs.existsSync(`${root}/${row.href}`)) {
               throw new Error(`missing materialized repo context: ${row.repo ?? "unknown"}`);
@@ -108,7 +110,8 @@ jobs:
             dataCommit: process.env.PUBLIC_ARCHIVE_COMMIT,
             coveredRepos: index.coverage.activeRepos?.length ?? null,
             materializedRepos: repos.count,
-            archiveRepos: archiveManifest.counts?.repos ?? null,
+            archiveRepos: repoCoverage.archiveRepos,
+            additionalPublicRepos: repoCoverage.attentionOnlyOrEventRepos,
             attentionRows: attention.count,
             gevRows: repo.attention.length,
             coreBytes: Object.fromEntries(largest),
@@ -183,7 +186,12 @@ jobs:
                       raise RuntimeError("deployed index is not the covered collector")
                   if index.get("coverage", {}).get("inventoryComplete") is not True:
                       raise RuntimeError("deployed inventory is incomplete")
-                  if repos.get("count") != manifest.get("counts", {}).get("repos"):
+                  repo_rows = repos.get("repos")
+                  if not isinstance(repo_rows, list) or repos.get("count") != len(repo_rows):
+                      raise RuntimeError("deployed repo index count is inconsistent")
+                  if len({row.get("repo") for row in repo_rows if isinstance(row, dict)}) != len(repo_rows):
+                      raise RuntimeError("deployed repo index has invalid or duplicate names")
+                  if repos["count"] < manifest.get("counts", {}).get("repos", 0):
                       raise RuntimeError("deployed repo materialization does not cover the archive")
                   if not gev.get("attention"):
                       raise RuntimeError("deployed GEV inbox is empty")
