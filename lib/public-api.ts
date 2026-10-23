@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import {
   openAttentionDb,
   readAttentionRecords,
@@ -13,6 +13,7 @@ import {
   type PublicArchive,
 } from "./public-snapshot.ts";
 import { contentRevision } from "./resource-revision.ts";
+import { queryRepo, type RepoContributionCounts, type ContributionCaveat } from "./repo-query.ts";
 import { readThreadEventsSeed, projectPublicThreadEvents, type PublicThreadEvent } from "./public-thread-events.ts";
 import { buildWorkQueues, type WorkQueueName } from "./work-queues.ts";
 import { buildRecentThreads, type RecentThread } from "./recent-threads.ts";
@@ -74,6 +75,7 @@ export type PublicApiIndex = {
     contributions: string;
     repos: string;
     repo: string;
+    repoSummary: string;
     thread: string;
   };
   resources: {
@@ -161,6 +163,7 @@ export type PublicRepoIndex = {
     revision: string;
     updatedAt: string | null;
     bytes: number;
+    summary: PublicResourceDescriptor;
   }[];
 };
 
@@ -174,6 +177,20 @@ export type PublicRepoResource = {
   contributions: PublicContribution[];
   attention: PublicAttentionItem[];
   threads: PublicThreadDescriptor[];
+};
+
+export type PublicRepoSummary = {
+  schemaVersion: typeof PUBLIC_API_SCHEMA;
+  privacy: "public-safe";
+  kind: "repo-contribution-summary";
+  revision: string;
+  repo: string;
+  activityRows: number;
+  counts: RepoContributionCounts;
+  commitYears: number[];
+  caveats: ContributionCaveat[];
+  coverage: { complete: false; source: "public-archive-snapshot" };
+  freshness: { sourceUpdatedAt: string | null; archiveUpdatedAt: string };
 };
 
 export type PublicThreadResource = {
@@ -240,6 +257,7 @@ export type CompiledPublicApi = {
   contributions: PublicContributions;
   repos: PublicRepoIndex;
   repoResources: Map<string, PublicRepoResource>;
+  repoSummaries: Map<string, PublicRepoSummary>;
   threadResources: Map<string, PublicThreadResource>;
 };
 
@@ -511,12 +529,16 @@ export function compilePublicApi(
     ...itemsByRepo.keys(),
     ...attentionByRepo.keys(),
     ...threadEventsByRepo.keys(),
+    ...snapshot.archive.commitBuckets.filter((bucket) => bucket.visibility === "public" && bucket.repo && safeRepoSegments(bucket.repo)).map((bucket) => bucket.repo!),
   ]);
 
   const repoResources = new Map<string, PublicRepoResource>();
+  const repoSummaries = new Map<string, PublicRepoSummary>();
   const threadResources = new Map<string, PublicThreadResource>();
   const repoRows: PublicRepoIndex["repos"] = [];
 
+  const summaryDb = new DatabaseSync(publicDbPath, { readOnly: true });
+  try {
   for (const repo of [...repoNames].sort()) {
     const contributions = itemsByRepo.get(repo) ?? [];
     const attention = attentionByRepo.get(repo) ?? [];
@@ -580,6 +602,27 @@ export function compilePublicApi(
     };
     repoResources.set(repo, repoResource);
 
+    // Count only explicitly public rows, even if an input DB contains mixed visibility.
+    const counts = queryRepo(summaryDb, repo, true);
+    const summaryBase = {
+      schemaVersion: PUBLIC_API_SCHEMA,
+      privacy: "public-safe" as const,
+      kind: "repo-contribution-summary" as const,
+      repo,
+      activityRows: counts.activity_rows,
+      counts: counts.counts,
+      commitYears: counts.commit_years,
+      caveats: counts.caveats,
+      coverage: { complete: false as const, source: "public-archive-snapshot" as const },
+    };
+    const summary: PublicRepoSummary = {
+      ...summaryBase,
+      revision: contentRevision(summaryBase),
+      freshness: { sourceUpdatedAt: counts.freshness.source_updated_at, archiveUpdatedAt: snapshot.manifest.lastCheckedAt },
+    };
+    if (Buffer.byteLength(JSON.stringify(summary) + "\n") >= 50_000) throw new Error("Repository summary exceeds 50 KB");
+    repoSummaries.set(repo, summary);
+
     repoRows.push({
       repo,
       contributions: contributions.length,
@@ -588,8 +631,10 @@ export function compilePublicApi(
       revision: repoResource.revision,
       updatedAt,
       bytes: Buffer.byteLength(JSON.stringify(repoResource) + "\n"),
+      summary: resourceDescriptor(`repos/${owner}/${name}/summary.json`, summary, summary.freshness.sourceUpdatedAt),
     });
   }
+  } finally { summaryDb.close(); }
 
   const actorState = buildActorIndex([...threadResources.values()]);
   const actorResources = new Map<string, PublicActorContext>();
@@ -698,7 +743,7 @@ export function compilePublicApi(
           { href: value.href, revision: value.revision },
         ]),
       ),
-      repos: repoRows.map(({ repo, href, revision }) => ({ repo, href, revision })),
+      repos: repoRows.map(({ repo, href, revision, summary }) => ({ repo, href, revision, summary: { href: summary.href, revision: summary.revision } })),
     }),
   };
 
@@ -714,6 +759,7 @@ export function compilePublicApi(
     contributions: "contributions.json",
     repos: "repos.json",
     repo: "repos/{owner}/{repo}.json",
+    repoSummary: "repos/{owner}/{repo}/summary.json",
     thread: "threads/{owner}/{repo}/{number}.json",
   };
   const resources = {
@@ -727,6 +773,7 @@ export function compilePublicApi(
       "fetch index.json",
       "compare the desired resource revision with the locally cached revision",
       "fetch only resources whose revision changed",
+      "for contribution counts, fetch repos/{owner}/{repo}/summary.json directly (under 50 KB), not the full repo context",
       "descend from repos.json to repo context, then to thread context only when needed",
     ],
   };
@@ -781,6 +828,7 @@ export function compilePublicApi(
     contributions,
     repos,
     repoResources,
+    repoSummaries,
     threadResources,
   };
 }
@@ -818,6 +866,12 @@ export function writePublicApi(
     if (!segments) continue;
     const [owner, name] = segments;
     writeJson(path.join(root, "repos", owner, `${name}.json`), resource);
+  }
+
+  for (const [repo, summary] of compiled.repoSummaries) {
+    const segments = safeRepoSegments(repo);
+    if (!segments) continue;
+    writeJson(path.join(root, "repos", ...segments, "summary.json"), summary);
   }
 
   for (const [key, resource] of compiled.threadResources) {

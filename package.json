@@ -13,6 +13,7 @@
     "export:public": "tsx scripts/export-public.ts",
     "export:api": "tsx scripts/export-api.ts",
     "sanity": "tsx scripts/sanity-report.ts",
+    "query": "node --experimental-strip-types scripts/query-repo.ts",
     "inbox:sync": "tsx scripts/inbox-sync.ts",
     "inbox:next": "tsx scripts/inbox-next.ts",
     "inbox": "npm run inbox:sync && npm run inbox:next",
