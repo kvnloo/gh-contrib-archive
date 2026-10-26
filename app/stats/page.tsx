@@ -48,7 +48,7 @@ function WeekChart({ stats }: { stats: DevStats }) {
         </div>
         {stats.velocityChangePct !== null ? (
           <p className={`rounded-full px-3 py-1 text-xs font-medium ${stats.velocityChangePct >= 0 ? "bg-lime-300/10 text-lime-300" : "bg-orange-300/10 text-orange-300"}`}>
-            {stats.velocityChangePct > 0 ? "+" : ""}{stats.velocityChangePct}% vs prior 28 days
+            {stats.velocityChangePct > 0 ? "+" : ""}{stats.velocityChangePct}% vs prior 28 days ({stats.previous28dEvents} events)
           </p>
         ) : (
           <p className="text-xs text-zinc-500">No prior 28-day baseline</p>
@@ -225,7 +225,7 @@ export default function StatsPage() {
             </div>
             {stats.recordWeek ? (
               <span className="rounded-full border border-lime-300/30 bg-lime-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-lime-300">
-                New 12-week record
+                {staleSnapshot ? "Snapshot 12-week high" : "New 12-week record"}
               </span>
             ) : null}
           </div>
