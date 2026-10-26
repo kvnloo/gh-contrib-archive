@@ -33,6 +33,12 @@ jobs:
       - name: Verify static export contract
         run: |
           test -f out/index.html
+          test -f out/stats/index.html
+          grep -q 'Developer' out/stats/index.html
+          grep -q 'Commits salvaged' out/stats/index.html
+          grep -q 'Salvage ledger' out/stats/index.html
+          grep -q 'Commit history' out/stats/index.html
+          grep -q 'Stats' out/index.html
           test -f out/worlds/index.html
           test -f out/world-graph.json
           test -f out/data/archive.json

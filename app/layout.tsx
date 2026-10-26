@@ -42,6 +42,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Link href="/worlds" className="flex min-h-11 items-center rounded-full px-3 hover:bg-zinc-900 hover:text-zinc-100">
                 Worlds
               </Link>
+              <Link href="/stats" className="flex min-h-11 items-center rounded-full px-3 hover:bg-zinc-900 hover:text-zinc-100">
+                Stats
+              </Link>
               <Link href="/sanity" className="flex min-h-11 items-center rounded-full px-3 hover:bg-zinc-900 hover:text-zinc-100">
                 Sanity
               </Link>
