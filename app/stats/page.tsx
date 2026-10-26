@@ -103,6 +103,49 @@ function Mix({ stats }: { stats: DevStats }) {
   );
 }
 
+function CommitHistory({ stats }: { stats: DevStats }) {
+  const recent = stats.yearlyCommits.slice(-9);
+  const max = Math.max(1, ...recent.map((r) => r.publicCount + r.privateCount));
+  return (
+    <section aria-labelledby="commit-history-title" className="mt-5 rounded-2xl border border-white/10 bg-zinc-900/60 p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-sky-300">Years in code</p>
+          <h2 id="commit-history-title" className="mt-2 text-xl font-semibold">Commit history</h2>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-zinc-400">
+          <span><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-sky-400" />Public</span>
+          <span><span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-violet-400/80" />Private</span>
+        </div>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-zinc-500">
+        GitHub contribution-graph counts by year. No private repositories, SHAs, or patches exposed.
+        Annual commit totals are not folded into event velocity or upstream salvage.
+      </p>
+      <ol className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-6 lg:grid-cols-9">
+        {recent.map((r) => {
+          const height = ((r.publicCount + r.privateCount) / max) * 100;
+          const total = r.publicCount + r.privateCount || 1;
+          return (
+            <li key={r.year} className="flex min-w-0 flex-col">
+              <div className="flex h-36 items-end">
+                <div className="flex w-full flex-col justify-end overflow-hidden rounded-t-md bg-zinc-800" style={{ height: `${Math.max(2, height)}%` }}>
+                  <div className="bg-violet-400/80" style={{ height: `${(r.privateCount / total) * 100}%` }} />
+                  <div className="bg-sky-400" style={{ height: `${(r.publicCount / total) * 100}%` }} />
+                </div>
+              </div>
+              <div className="mt-2 text-center text-xs font-medium tabular-nums text-zinc-200">{r.year}</div>
+              <div className="text-center text-[11px] tabular-nums text-zinc-500">{integer.format(r.publicCount + r.privateCount)}</div>
+              <span className="sr-only">{r.year}: {r.publicCount} public and {r.privateCount} private commits</span>
+            </li>
+          );
+        })}
+      </ol>
+      {recent.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No yearly commit records in this snapshot.</p> : null}
+    </section>
+  );
+}
+
 function Salvage({ stats }: { stats: DevStats }) {
   return (
     <section aria-labelledby="salvage-title" className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4 sm:p-6">
@@ -151,6 +194,8 @@ export default function StatsPage() {
     JSON.parse(readFileSync(path.join(process.cwd(), "data", "upstream-landings.json"), "utf8")) as unknown,
   );
   const stats = buildDevStats(archive, ledger, manifest.lastCheckedAt);
+  const snapshotAgeDays = Math.max(0, Math.floor((Date.now() - Date.parse(stats.asOf)) / 86_400_000));
+  const staleSnapshot = !Number.isFinite(snapshotAgeDays) || snapshotAgeDays >= 3;
   const topRepos = archive.byRepo.slice(0, 5);
   const maxRepo = Math.max(1, ...topRepos.map((repo) => repo.n));
 
@@ -190,6 +235,13 @@ export default function StatsPage() {
         </div>
       </section>
 
+      {staleSnapshot ? (
+        <div role="status" className="mt-5 rounded-xl border border-amber-300/30 bg-amber-300/5 px-4 py-3 text-xs leading-5 text-amber-200 sm:text-sm">
+          Historical snapshot: the archive was last checked {stats.asOf.slice(0, 10)}.
+          These are archived records, not verified current-week activity. A collector refresh is needed for live velocity.
+        </div>
+      ) : null}
+
       <section aria-label="Key GitHub statistics" className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Score label="Commits" value={stats.publicCommits + stats.privateCommits} note={`${integer.format(stats.publicCommits)} public · ${integer.format(stats.privateCommits)} private · yearly buckets`} accent="text-sky-200" />
         <Score label="PRs merged" value={stats.mergedPublicPRs} note={`Public authored PRs · ${integer.format(stats.publicPRs)} total · state at snapshot`} accent="text-lime-300" />
@@ -211,6 +263,8 @@ export default function StatsPage() {
           <div className="mt-5"><Mix stats={stats} /></div>
         </div>
       </section>
+
+      <CommitHistory stats={stats} />
 
       <section className="mt-5 grid gap-3 lg:grid-cols-[1.15fr_1fr]">
         <Salvage stats={stats} />
