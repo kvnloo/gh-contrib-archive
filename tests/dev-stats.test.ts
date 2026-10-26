@@ -44,6 +44,7 @@ describe("public-safe dev velocity", () => {
 
     assert.equal(result.publicCommits, 12);
     assert.equal(result.privateCommits, 7);
+    assert.deepEqual(result.yearlyCommits, [{ year: 2026, publicCount: 12, privateCount: 7 }]);
     assert.equal(result.mergedPublicPRs, 1);
     assert.equal(result.publicPRs, 1);
     assert.equal(result.issuesCreated, 2);
