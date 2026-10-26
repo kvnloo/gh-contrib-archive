@@ -27,6 +27,7 @@ export type DevStats = {
   asOf: string;
   publicCommits: number;
   privateCommits: number;
+  yearlyCommits: { year: number; publicCount: number; privateCount: number }[];
   mergedPublicPRs: number;
   publicPRs: number;
   issuesCreated: number;
@@ -166,11 +167,24 @@ export function buildDevStats(
     .filter((row) => row.visibility === "private")
     .reduce((n, row) => n + safeCount(row.commit_count), 0);
 
+  const byCommitYear = new Map<number, { year: number; publicCount: number; privateCount: number }>();
+  for (const row of archive.commitBuckets) {
+    if (!Number.isSafeInteger(row.year)) continue;
+    const entry = byCommitYear.get(row.year) ?? { year: row.year, publicCount: 0, privateCount: 0 };
+    const count = safeCount(row.commit_count);
+    if (row.visibility === "public") entry.publicCount += count;
+    if (row.visibility === "private") entry.privateCount += count;
+    byCommitYear.set(row.year, entry);
+  }
+  const yearlyCommits = [...byCommitYear.values()]
+    .sort((a, b) => a.year - b.year);
+
   const priorBest = Math.max(0, ...weeks.slice(0, -1).map((week) => week.n));
   return {
     asOf,
     publicCommits,
     privateCommits,
+    yearlyCommits,
     mergedPublicPRs,
     publicPRs,
     issuesCreated,
