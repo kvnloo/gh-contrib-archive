@@ -2,7 +2,7 @@
 
 Public-safe visualization and read API for [**@kvnloo**](https://github.com/kvnloo) GitHub activity. Repo: [github.com/kvnloo/gh-contrib-archive](https://github.com/kvnloo/gh-contrib-archive).
 
-Five graph worlds (keys 1–5): `/worlds`. Ledger: `/`.
+Five graph worlds (keys 1–5): `/worlds`. Ledger: `/`. Stats: `/stats` — rolling event velocity, authored issues, public merged PRs, yearly commit totals, and provenance-backed upstream salvage. Salvage coverage is incomplete and disclosed on the page.
 
 This tree follows the [Verified OSS Loop](https://github.com/kvnloo/verified-oss-loop). CI is GitHub Actions (`npm test` + `npm run build`). GitHub Pages serves the static app **and** a versioned, read-only JSON API.
 
