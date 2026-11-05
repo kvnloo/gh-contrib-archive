@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { WORLDS } from "@/components/worlds/catalog";
 import {
   adjacentWorldId,
+  worldIdForPath,
   worldIdForSwipe,
 } from "@/components/worlds/navigation";
 
@@ -14,7 +15,8 @@ export function WorldChrome({ children, title }: { children: React.ReactNode; ti
   const path = usePathname();
   const router = useRouter();
   const touchStartX = useRef<number | null>(null);
-  const currentWorld = WORLDS.find((world) => path.endsWith(`/${world.id}`)) ?? WORLDS[0];
+  const currentId = worldIdForPath(path);
+  const currentWorld = WORLDS.find((world) => world.id === currentId) ?? WORLDS[0];
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

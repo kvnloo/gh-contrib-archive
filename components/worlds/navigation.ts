@@ -30,3 +30,10 @@ export function worldIdForSwipe(
   }
   return adjacentWorldId(currentId, deltaX < 0 ? 1 : -1);
 }
+
+/** The world for a route. Exported pages use trailingSlash (and may carry a basePath), so match the
+ * last path segment instead of `endsWith("/<id>")`, which never matched `/worlds/metro/`. */
+export function worldIdForPath(path: string): WorldNavId {
+  const last = path.replace(/\/+$/, "").split("/").pop() ?? "";
+  return WORLD_NAV_IDS[currentIndex(last)];
+}
