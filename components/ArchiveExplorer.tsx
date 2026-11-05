@@ -161,12 +161,12 @@ export default function ArchiveExplorer({ archive, manifest, featured = [] }: Pr
                   href={`/featured/${f.slug}`}
                   data-featured-card={f.slug}
                   className="flex min-h-11 flex-col gap-1 p-4 no-underline"
-                  style={{ background: f.theme.bg, color: f.theme.fg, borderRadius: f.theme.radius, borderLeft: `4px solid ${f.theme.accent}`, fontFamily: f.theme.font }}
+                  style={{ background: f.theme.panel, color: f.theme.fg, borderRadius: f.theme.radius, border: `1px solid color-mix(in srgb, ${f.theme.accent} 45%, transparent)`, borderLeft: `4px solid ${f.theme.accent}`, fontFamily: f.theme.font }}
                 >
                   <span style={{ fontFamily: f.theme.display, textTransform: f.theme.caps ? "uppercase" : "none" }} className="text-lg font-bold leading-tight">{f.name}</span>
                   <span className="text-xs" style={{ color: f.theme.muted }}>{f.tagline}</span>
                   <span className="mt-1 text-sm tabular-nums">
-                    {f.total.toLocaleString("en-US")} contributions · {f.merged} merged · <span style={{ color: f.theme.accent2 }}>{f.open} open</span>
+                    {f.total.toLocaleString("en-US")} contributions · {f.merged} merged · <b className="font-semibold">{f.open} open</b>
                   </span>
                 </Link>
               </li>
