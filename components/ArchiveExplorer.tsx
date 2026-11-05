@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { HBars, MonthHeat, TypeMix, YearBars } from "@/components/charts";
 import { pageArchiveItems, type ArchiveFilters } from "@/lib/archive-filter";
+import type { FeaturedSummary } from "@/lib/featured";
 import type { PublicArchive, PublicSnapshotManifest } from "@/lib/public-snapshot";
 
 const TYPES = [
@@ -31,6 +32,7 @@ const FLAGS = [
 ];
 
 type Props = {
+  featured?: FeaturedSummary[];
   archive: PublicArchive;
   manifest: PublicSnapshotManifest;
 };
@@ -69,7 +71,7 @@ function syncUrl(filters: ArchiveFilters, page: number) {
   window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
 }
 
-export default function ArchiveExplorer({ archive, manifest }: Props) {
+export default function ArchiveExplorer({ archive, manifest, featured = [] }: Props) {
   const [filters, setFilters] = useState<ArchiveFilters>({});
   const [draft, setDraft] = useState<ArchiveFilters>({});
   const [page, setPage] = useState(0);
@@ -140,10 +142,38 @@ export default function ArchiveExplorer({ archive, manifest }: Props) {
           {" "}· public issues, PRs, and comments are linked. Private repositories appear only
           as anonymous type/date events and aggregate commit counts.
         </p>
+        <p className="text-lg font-semibold text-zinc-100" data-headline>
+          {archive.stats.total.toLocaleString("en-US")} contributions across {archive.repoCount.toLocaleString("en-US")} repos
+          <span className="block text-xs font-normal text-zinc-500">issues, PRs, reviews and comments since {archive.byYear[0]?.year ?? "2016"}; commits counted separately</span>
+        </p>
         <p className="text-xs text-zinc-600">
           Public snapshot checked {manifest.lastCheckedAt.slice(0, 19).replace("T", " ")} UTC · schema v{manifest.schemaVersion}
         </p>
       </header>
+
+      {featured.length ? (
+        <section aria-labelledby="featured-h" className="flex flex-col gap-3">
+          <h2 id="featured-h" className="text-xs uppercase tracking-[0.2em] text-zinc-500">Featured · pinned open-source work</h2>
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {featured.map((f) => (
+              <li key={f.slug}>
+                <Link
+                  href={`/featured/${f.slug}`}
+                  data-featured-card={f.slug}
+                  className="flex min-h-11 flex-col gap-1 p-4 no-underline"
+                  style={{ background: f.theme.bg, color: f.theme.fg, borderRadius: f.theme.radius, borderLeft: `4px solid ${f.theme.accent}`, fontFamily: f.theme.font }}
+                >
+                  <span style={{ fontFamily: f.theme.display, textTransform: f.theme.caps ? "uppercase" : "none" }} className="text-lg font-bold leading-tight">{f.name}</span>
+                  <span className="text-xs" style={{ color: f.theme.muted }}>{f.tagline}</span>
+                  <span className="mt-1 text-sm tabular-nums">
+                    {f.total.toLocaleString("en-US")} contributions · {f.merged} merged · <span style={{ color: f.theme.accent2 }}>{f.open} open</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="public records" value={archive.stats.public_n} />
