@@ -474,8 +474,10 @@ async function main() {
   const day = searchDay(watermark);
   console.log(`incremental since ${watermark} (${before.n} existing rows)`);
 
-  await searchIssuesWindow(db, "pull_request", day, nextDay(new Date().toISOString().slice(0, 10)));
-  await searchIssuesWindow(db, "issue", day, nextDay(new Date().toISOString().slice(0, 10)));
+  // ARCHIVE_BACKFILL_FROM=YYYY-MM-DD re-searches issues/PRs from that day (upsert, adds only what is missing)
+  const issueDay = process.env.ARCHIVE_BACKFILL_FROM ?? day;
+  await searchIssuesWindow(db, "pull_request", issueDay, nextDay(new Date().toISOString().slice(0, 10)));
+  await searchIssuesWindow(db, "issue", issueDay, nextDay(new Date().toISOString().slice(0, 10)));
   await ingestCommentsSince(db, watermark);
   await ingestReviewsSince(db, day);
 
