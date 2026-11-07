@@ -1,4 +1,4 @@
-export const WORLD_NAV_IDS = [
+const WORLD_NAV_IDS = [
   "mycelium",
   "night",
   "phase",

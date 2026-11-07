@@ -9,7 +9,7 @@ export function setGillMap(tex: THREE.Texture) {
 }
 
 /** Bell-shaped cap with a slight lip, like the target's glowing fungi. */
-export function capGeometry(): THREE.BufferGeometry {
+function capGeometry(): THREE.BufferGeometry {
   const pts: THREE.Vector2[] = [];
   const steps = 14;
   for (let i = 0; i <= steps; i++) {
@@ -26,7 +26,7 @@ export function capGeometry(): THREE.BufferGeometry {
 }
 
 /** Slender, slightly swollen stem rooted below the cap origin. */
-export function stemGeometry(): THREE.BufferGeometry {
+function stemGeometry(): THREE.BufferGeometry {
   const pts: THREE.Vector2[] = [];
   const steps = 10;
   for (let i = 0; i <= steps; i++) {

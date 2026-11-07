@@ -4,7 +4,7 @@
  */
 
 export const WATER_LEVEL = -1.24;
-export const CHANNEL_HALF_WIDTH = 2.1;
+const CHANNEL_HALF_WIDTH = 2.1;
 
 function hash2(x: number, y: number): number {
   const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
@@ -25,7 +25,7 @@ function smoothNoise(x: number, y: number): number {
   return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
 }
 
-export function fbm(x: number, y: number, octaves = 4): number {
+function fbm(x: number, y: number, octaves = 4): number {
   let sum = 0;
   let amp = 0.5;
   let fx = x;
@@ -77,12 +77,6 @@ export function terrainHeight(x: number, z: number): number {
   return (
     -2.05 + bank + walls + frame + ridge + ridgeCrest + boulders + detail + clods + grit + fall
   );
-}
-
-/** 0 in the dry uplands, 1 in the wet stream bed. */
-export function wetness(x: number, z: number): number {
-  const h = terrainHeight(x, z);
-  return 1 - smoothstep(WATER_LEVEL - 0.05, WATER_LEVEL + 1.5, h);
 }
 
 export function streamCenter(z: number): number {
