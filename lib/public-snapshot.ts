@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 
-export const PUBLIC_SNAPSHOT_SCHEMA = 1 as const;
+const PUBLIC_SNAPSHOT_SCHEMA = 1 as const;
 
 type ContributionRow = {
   id: string;
@@ -37,7 +37,7 @@ type CommitRow = {
   html_url: string | null;
 };
 
-export type PublicArchiveItem =
+type PublicArchiveItem =
   | {
       id: string;
       type: string;
@@ -60,7 +60,7 @@ export type PublicArchiveItem =
       created_at: string;
     };
 
-export type PublicWorldNode =
+type PublicWorldNode =
   | {
       id: string;
       type: string;
@@ -80,7 +80,7 @@ export type PublicWorldNode =
       visibility: "private";
     };
 
-export type PublicWorldGraph = {
+type PublicWorldGraph = {
   login: string;
   privacy: "public-safe";
   nodes: PublicWorldNode[];

@@ -5,7 +5,7 @@ import path from "node:path";
 export const PRIVATE_DB_PATH = path.join(process.cwd(), "data", "github.db");
 export const PUBLIC_DB_PATH = path.join(process.cwd(), "data", "public.db");
 
-export const DB_PATH =
+const DB_PATH =
   process.env.USE_PRIVATE_DB === "1" ? PRIVATE_DB_PATH : PUBLIC_DB_PATH;
 
 export function openDb(dbPath = DB_PATH) {

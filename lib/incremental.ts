@@ -1,6 +1,6 @@
-export const OVERLAP_MS = 2 * 24 * 60 * 60 * 1000;
+const OVERLAP_MS = 2 * 24 * 60 * 60 * 1000;
 
-export function parseArchiveTime(value: string): number {
+function parseArchiveTime(value: string): number {
   const iso = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const parsed = Date.parse(iso);
   if (Number.isNaN(parsed)) throw new Error(`bad archive timestamp ${value}`);
