@@ -7,6 +7,9 @@ import { excerptOf, flagContribution } from "../lib/sanity.ts";
 const LOGIN = process.env.GH_LOGIN ?? "kvnloo";
 const TOKEN = process.env.GH_ARCHIVE_TOKEN ?? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
 const DB_PATH = process.env.ARCHIVE_DB ?? PUBLIC_DB_PATH;
+// Page caps bound one run; raise them after a long gap since the last sync.
+const COMMENT_PAGE_CAP = Number(process.env.ARCHIVE_COMMENT_PAGES ?? 80);
+const SEARCH_PAGE_CAP = Number(process.env.ARCHIVE_SEARCH_PAGES ?? 20);
 
 if (!TOKEN) {
   console.error("GH_ARCHIVE_TOKEN or GH_TOKEN is required");
@@ -33,6 +36,19 @@ type Item = {
 };
 
 async function graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+  // Long walks hit transient GOAWAY/5xx; retry those, never GraphQL errors.
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await graphqlOnce<T>(query, variables);
+    } catch (error) {
+      const transient = error instanceof TypeError || /^HTTP 5\d\d$/.test((error as Error).message);
+      if (!transient || attempt === 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000 * 2 ** attempt));
+    }
+  }
+}
+
+async function graphqlOnce<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const res = await fetch("https://api.github.com/graphql", {
     method: "POST",
     headers: {
@@ -114,7 +130,7 @@ function isPrivateRepo(repo: Repo) {
 
 async function searchIssues(db: DatabaseSync, query: string, type: "pull_request" | "issue") {
   let cursor: string | null = null;
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= SEARCH_PAGE_CAP; page += 1) {
     const json = await graphql<{
       data: {
         search: {
@@ -175,7 +191,7 @@ async function searchIssues(db: DatabaseSync, query: string, type: "pull_request
     }
     console.log(`${type} search page ${page}: ${written}`);
     if (!conn.pageInfo.hasNextPage) return;
-    if (page === 20) throw new Error(`${type} search still has pages after the incremental cap`);
+    if (page === SEARCH_PAGE_CAP) throw new Error(`${type} search still has pages after the incremental cap`);
     cursor = conn.pageInfo.endCursor;
   }
 }
@@ -211,7 +227,9 @@ async function searchIssuesWindow(
 
 async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
   let cursor: string | null = null;
-  for (let page = 1; page <= 80; page += 1) {
+  // Buffer rows: a capped walk must not write, or the next run's watermark skips the gap.
+  const rows: Item[] = [];
+  for (let page = 1; page <= COMMENT_PAGE_CAP; page += 1) {
     const json = await graphql<{
       data: {
         user: {
@@ -247,7 +265,7 @@ async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
     const conn = json.data.user.issueComments;
     for (const node of conn.nodes) {
       if (pageIsOlderThan([node.updatedAt], watermark)) continue;
-      upsert(db, {
+      rows.push({
         id: node.id,
         type: "comment",
         url: node.url,
@@ -263,16 +281,18 @@ async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
     }
     const oldest = conn.nodes.at(-1)?.updatedAt ?? "none";
     console.log(`comments page ${page}: ${conn.nodes.length} oldest ${oldest}`);
-    if (pageIsOlderThan(conn.nodes.map((node) => node.updatedAt), watermark)) return;
-    if (!conn.pageInfo.hasNextPage) return;
-    if (page === 80) throw new Error("comment walk still newer than the high-water mark after the cap");
+    if (pageIsOlderThan(conn.nodes.map((node) => node.updatedAt), watermark) || !conn.pageInfo.hasNextPage) {
+      for (const row of rows) upsert(db, row);
+      return;
+    }
+    if (page === COMMENT_PAGE_CAP) throw new Error("comment walk still newer than the high-water mark after the cap");
     cursor = conn.pageInfo.endCursor;
   }
 }
 
 async function ingestReviewsSince(db: DatabaseSync, day: string) {
   let cursor: string | null = null;
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= SEARCH_PAGE_CAP; page += 1) {
     const json = await graphql<{
       data: {
         search: {
@@ -369,7 +389,7 @@ async function ingestReviewsSince(db: DatabaseSync, day: string) {
     }
     console.log(`reviews page ${page}: ${conn.nodes.length} PRs`);
     if (!conn.pageInfo.hasNextPage) return;
-    if (page === 20) throw new Error("review search still has pages after the incremental cap");
+    if (page === SEARCH_PAGE_CAP) throw new Error("review search still has pages after the incremental cap");
     cursor = conn.pageInfo.endCursor;
   }
 }
