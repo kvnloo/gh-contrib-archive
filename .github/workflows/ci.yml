@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: python3 tests/factory-cache.test.py
       - run: npm run build
       - name: Verify static export contract
         run: |
