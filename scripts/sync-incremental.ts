@@ -7,6 +7,11 @@ import { excerptOf, flagContribution } from "../lib/sanity.ts";
 const LOGIN = process.env.GH_LOGIN ?? "kvnloo";
 const TOKEN = process.env.GH_ARCHIVE_TOKEN ?? process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
 const DB_PATH = process.env.ARCHIVE_DB ?? PUBLIC_DB_PATH;
+// Walk caps. A capped walk throws before the commit step, so nothing partial is published.
+// Defaults are sized for ~20 days of comment volume (about 100 comments/day); raise via env after longer gaps.
+const COMMENT_PAGES = Number(process.env.ARCHIVE_COMMENT_PAGES ?? 400);
+const SEARCH_PAGES = Number(process.env.ARCHIVE_SEARCH_PAGES ?? 60);
+const REVIEW_PAGES = Number(process.env.ARCHIVE_REVIEW_PAGES ?? 60);
 
 if (!TOKEN) {
   console.error("GH_ARCHIVE_TOKEN or GH_TOKEN is required");
@@ -114,7 +119,7 @@ function isPrivateRepo(repo: Repo) {
 
 async function searchIssues(db: DatabaseSync, query: string, type: "pull_request" | "issue") {
   let cursor: string | null = null;
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= SEARCH_PAGES; page += 1) {
     const json = await graphql<{
       data: {
         search: {
@@ -175,7 +180,7 @@ async function searchIssues(db: DatabaseSync, query: string, type: "pull_request
     }
     console.log(`${type} search page ${page}: ${written}`);
     if (!conn.pageInfo.hasNextPage) return;
-    if (page === 20) throw new Error(`${type} search still has pages after the incremental cap`);
+    if (page === SEARCH_PAGES) throw new Error(`${type} search still has pages after ${SEARCH_PAGES} pages (raise ARCHIVE_SEARCH_PAGES)`);
     cursor = conn.pageInfo.endCursor;
   }
 }
@@ -234,7 +239,7 @@ async function searchIssuesWindow(
 
 async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
   let cursor: string | null = null;
-  for (let page = 1; page <= 80; page += 1) {
+  for (let page = 1; page <= COMMENT_PAGES; page += 1) {
     const json = await graphql<{
       data: {
         user: {
@@ -288,14 +293,14 @@ async function ingestCommentsSince(db: DatabaseSync, watermark: string) {
     console.log(`comments page ${page}: ${conn.nodes.length} oldest ${oldest}`);
     if (pageIsOlderThan(conn.nodes.map((node) => node.updatedAt), watermark)) return;
     if (!conn.pageInfo.hasNextPage) return;
-    if (page === 80) throw new Error("comment walk still newer than the high-water mark after the cap");
+    if (page === COMMENT_PAGES) throw new Error(`comment walk still newer than the high-water mark after ${COMMENT_PAGES} pages (raise ARCHIVE_COMMENT_PAGES)`);
     cursor = conn.pageInfo.endCursor;
   }
 }
 
 async function ingestReviewsSince(db: DatabaseSync, day: string) {
   let cursor: string | null = null;
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= REVIEW_PAGES; page += 1) {
     const json = await graphql<{
       data: {
         search: {
@@ -392,7 +397,7 @@ async function ingestReviewsSince(db: DatabaseSync, day: string) {
     }
     console.log(`reviews page ${page}: ${conn.nodes.length} PRs`);
     if (!conn.pageInfo.hasNextPage) return;
-    if (page === 20) throw new Error("review search still has pages after the incremental cap");
+    if (page === REVIEW_PAGES) throw new Error(`review search still has pages after ${REVIEW_PAGES} pages (raise ARCHIVE_REVIEW_PAGES)`);
     cursor = conn.pageInfo.endCursor;
   }
 }
