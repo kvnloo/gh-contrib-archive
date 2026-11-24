@@ -57,6 +57,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           br="sync/archive-${{ github.run_id }}"
+          # the fresh copy is saved in /tmp; drop the worktree change so switching to a newer main
+          # (another sync may have landed meanwhile) cannot fail with "would be overwritten"
+          git reset -q
+          git checkout -- data/public.db
           git fetch origin main
           git checkout -B "$br" origin/main
           cp /tmp/public.db.sync data/public.db
