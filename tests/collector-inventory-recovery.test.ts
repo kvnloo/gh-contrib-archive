@@ -16,7 +16,7 @@ import fs from "node:fs";
 const at = "2026-10-10T00:00:00Z";
 const seen = [];
 let htmlOnce = true;
-const node = n => ({ number: n, title: "Synthetic public PR " + n, url: "https://github.com/fixture/repo/pull/" + n,
+const node = n => ({ id: "PR_" + n, number: n, title: "Synthetic public PR " + n, url: "https://github.com/fixture/repo/pull/" + n,
   state: "OPEN", isDraft: false, updatedAt: at, author: { login: "fixture-self" }, comments: { totalCount: 0 },
   reviewDecision: "REVIEW_REQUIRED", mergeStateStatus: "CLEAN",
   repository: { nameWithOwner: "fixture/repo", isPrivate: false, visibility: "PUBLIC" } });
@@ -24,6 +24,7 @@ globalThis.fetch = async (input, init = {}) => {
   const u = new URL(String(input));
   if (u.pathname === "/graphql") {
     const v = JSON.parse(init.body).variables;
+    if (v.ids) return Response.json({ data: { nodes: [] } });
     seen.push("graphql:" + v.pageSize);
     if (v.after === null && v.pageSize > 50) return new Response("<html>502 Bad Gateway</html>", { status: 502 });
     const page = v.after === null ? 0 : v.after === "a" ? 1 : 2;
@@ -77,7 +78,7 @@ import fs from "node:fs";
 const at = "2026-10-10T00:00:00Z";
 const seen = [];
 let calls = 0;
-const node = n => ({ number: n, title: "Synthetic public PR " + n, url: "https://github.com/fixture/repo/pull/" + n,
+const node = n => ({ id: "PR_" + n, number: n, title: "Synthetic public PR " + n, url: "https://github.com/fixture/repo/pull/" + n,
   state: "OPEN", isDraft: false, updatedAt: at, author: { login: "fixture-self" }, comments: { totalCount: 0 },
   reviewDecision: "REVIEW_REQUIRED", mergeStateStatus: "CLEAN",
   repository: { nameWithOwner: "fixture/repo", isPrivate: false, visibility: "PUBLIC" } });
@@ -86,6 +87,7 @@ globalThis.fetch = async (input, init = {}) => {
   seen.push(u.pathname);
   if (u.pathname === "/graphql") {
     const v = JSON.parse(init.body).variables;
+    if (v.ids) return Response.json({ data: { nodes: [] } });
     calls++;
     const page = v.after === null ? 0 : 1;
     const total = calls === 2 ? 3 : 2;
@@ -100,14 +102,61 @@ globalThis.fetch = async (input, init = {}) => {
 process.on("exit", () => fs.writeFileSync("requests.json", JSON.stringify(seen)));
 `;
 
+// Heavy per-PR fields (mergeStateStatus, reviewDecision) push a 100-row
+// connection page to ~10 s and into gateway 502s at every page size (seen
+// live). The inventory walk must not depend on them; enrich by node id.
+const heavyMock = `
+import fs from "node:fs";
+const at = "2026-10-10T00:00:00Z";
+const seen = [];
+globalThis.fetch = async (input, init = {}) => {
+  const u = new URL(String(input));
+  if (u.pathname === "/graphql") {
+    const body = JSON.parse(init.body);
+    if (body.query.includes("pullRequests(")) {
+      seen.push("walk");
+      if (body.query.includes("mergeStateStatus")) return new Response("<html>502</html>", { status: 502 });
+      const page = body.variables.after === null ? 0 : 1;
+      return Response.json({ data: { user: { pullRequests: { totalCount: 3,
+        pageInfo: { hasNextPage: page === 0, endCursor: page === 0 ? "a" : null },
+        nodes: (page === 0 ? [1, 2] : [3]).map(n => ({ id: "PR_" + n, number: n, title: "Synthetic public PR " + n,
+          url: "https://github.com/fixture/repo/pull/" + n, state: "OPEN", isDraft: false, updatedAt: at,
+          author: { login: "fixture-self" },
+          repository: n === 3 ? { nameWithOwner: "fixture/private", isPrivate: true, visibility: "PRIVATE" }
+            : { nameWithOwner: "fixture/repo", isPrivate: false, visibility: "PUBLIC" } })) } } } });
+    }
+    seen.push("enrich:" + body.variables.ids.join(","));
+    return Response.json({ data: { nodes: body.variables.ids.map(id => ({ id, comments: { totalCount: 5 },
+      reviewDecision: "APPROVED", mergeStateStatus: "CLEAN" })) } });
+  }
+  seen.push(u.pathname);
+  if (u.pathname === "/search/issues") return Response.json({ total_count: 0, items: [] });
+  if (u.pathname === "/repos/bilawalsidhu/gods-eye-view")
+    return Response.json({ private: false, visibility: "public", full_name: "bilawalsidhu/gods-eye-view" });
+  throw new Error("unexpected request " + u.pathname);
+};
+process.on("exit", () => fs.writeFileSync("requests.json", JSON.stringify(seen)));
+`;
+
 describe("covered inventory recovers from transient and stale-pin failures", () => {
+  it("proves the authored inventory with a light walk and enriches public PRs by node id", () => {
+    const { seed, requests } = run([], heavyMock);
+    assert.equal(seed.coverage.authored.complete, true, JSON.stringify(seed.coverage.authored));
+    assert.equal(seed.coverage.authored.enrichmentMissing, 0);
+    assert.deepEqual(requests.filter((r: string) => r === "walk" || r.startsWith("enrich:")), ["walk", "walk", "enrich:PR_1,PR_2"]);
+    const row = seed.items.find((r: { number: number }) => r.number === 1);
+    assert.equal(row.reviewDecision, "APPROVED");
+    assert.equal(row.mergeState, "CLEAN");
+    assert.equal(seed.items.some((r: { repo: string }) => r.repo === "fixture/private"), false);
+  });
   it("restarts the authored walk when totalCount changes mid-scan, keeping the stable-count rule", () => {
     const { seed, requests, stdout } = run([], churnMock);
-    assert.equal(requests.filter((r: string) => r === "/graphql").length, 4);
+    // 2 walk pages x 2 attempts + 1 enrichment batch
+    assert.equal(requests.filter((r: string) => r === "/graphql").length, 5);
     assert.equal(seed.coverage.authored.complete, true, JSON.stringify(seed.coverage.authored));
     assert.equal(seed.coverage.authored.attempts, 2);
     assert.equal(seed.coverage.authored.reported, 2);
-    assert.match(stdout, /"authored":\{"complete":true,"reason":null,"reported":2,"attempts":2\}/);
+    assert.match(stdout, /"authored":\{"complete":true,"reason":null,"reported":2,"attempts":2,"observedCounts":\[\[2,3,1\]\]/);
   });
 
   it("restores the authored page size after a downshift instead of paying for small pages forever", () => {

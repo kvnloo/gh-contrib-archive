@@ -24,7 +24,7 @@ globalThis.fetch = async input => {
   seen.push(u.pathname);
   if (u.pathname === "/graphql") return Response.json({ data: { user: { pullRequests: {
     totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null },
-    nodes: [{ number: 1, title: "Synthetic public PR 1",
+    nodes: [{ id: "PR_1", number: 1, title: "Synthetic public PR 1",
       url: "https://github.com/fixture/repo/pull/1", state: "OPEN", isDraft: false,
       updatedAt: at, author: { login: "fixture-self" }, comments: { totalCount: 0 },
       reviewDecision: "REVIEW_REQUIRED", mergeStateStatus: "CLEAN",
@@ -72,7 +72,7 @@ describe("public collector transport and GitHub identities", () => {
       assert.equal(result.status, 0, result.stderr);
       const seed = JSON.parse(fs.readFileSync(path.join(root, "data/attention-seed.json"), "utf8"));
       const requests = JSON.parse(fs.readFileSync(path.join(root, "requests.json"), "utf8"));
-      assert.deepEqual(requests.filter((name: string) => name.startsWith("graphql:")),
+      assert.deepEqual(requests.filter((name: string) => /^graphql:\d+$/.test(name)),
         ["graphql:100", "graphql:100", "graphql:100", "graphql:50"]);
       assert.equal(seed.coverage.authored.complete, true);
       assert.equal(seed.coverage.recent.complete, true);
@@ -101,8 +101,9 @@ describe("public collector transport and GitHub identities", () => {
       assert.equal(result.status, 0, result.stderr);
       const seed = JSON.parse(fs.readFileSync(path.join(root, "data/attention-seed.json"), "utf8"));
       const requested = JSON.parse(fs.readFileSync(path.join(root, "requests.json"), "utf8"));
-      assert.equal(requested.length, 5, "a transient HTTP 502 must consume one extra request");
-      assert.equal(seed.coverage.requests, 5);
+      // walk + 502 retry + searches + pin + one node-id enrichment batch
+      assert.equal(requested.length, 6, "a transient HTTP 502 must consume one extra request");
+      assert.equal(seed.coverage.requests, 6);
       assert.equal(seed.coverage.authored.complete, true);
       assert.equal(seed.coverage.recent.complete, true);
       assert.equal(seed.coverage.complete, true);

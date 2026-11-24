@@ -185,18 +185,52 @@ async function collectSearch(reader, query, { now = Date.now(), start = firstSec
     reported: rootReported, verifiedReported, fetched: items.size, complete, partitions,
     reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'partition_count_mismatch' } };
 }
-const PR_QUERY = `query($login:String!,$after:String,$pageSize:Int!){user(login:$login){pullRequests(first:$pageSize,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{number title url state isDraft updatedAt author{login} comments(first:1){totalCount} reviewDecision mergeStateStatus repository{nameWithOwner isPrivate visibility}}}}}`;
+// The count-stable inventory walk selects only cheap fields: mergeStateStatus
+// and reviewDecision push a 100-row page to ~10 s and into gateway 502s, which
+// stretches a 2k+ row walk past the window in which totalCount stays stable.
+const PR_QUERY = `query($login:String!,$after:String,$pageSize:Int!){user(login:$login){pullRequests(first:$pageSize,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{id number title url state isDraft updatedAt author{login} repository{nameWithOwner isPrivate visibility}}}}}`;
+// Review/merge state for already-proven public PRs, fetched by node id after the walk.
+const PR_ENRICH_QUERY = `query($ids:[ID!]!){nodes(ids:$ids){... on PullRequest{id comments(first:1){totalCount} reviewDecision mergeStateStatus}}}`;
+const REVIEW_DECISIONS = ['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED'];
+const MERGE_STATES = ['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'DRAFT', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'];
+/** Enrichment is best-effort: a failed batch leaves fields null (as search-sourced rows already are) and is counted. */
+async function enrichAuthored(reader, byNodeId) {
+  const ids = [...byNodeId.keys()]; let i = 0, size = 50, missing = 0;
+  while (i < ids.length) {
+    if (reader.remaining < 1) { missing += ids.length - i; break; }
+    const batch = ids.slice(i, i + size);
+    let response;
+    try { response = await reader.json('/graphql', { query: PR_ENRICH_QUERY, variables: { ids: batch } }); }
+    catch (error) {
+      if (error instanceof CollectionError && ['http_502', 'http_503', 'http_504', 'request_timeout'].includes(error.code) && size > 10) { size = Math.max(10, Math.floor(size / 2)); continue; }
+      missing += batch.length; i += batch.length; continue;
+    }
+    const nodes = Array.isArray(response.data?.data?.nodes) ? response.data.data.nodes : [];
+    const got = new Set();
+    for (const n of nodes) {
+      const row = n && byNodeId.get(n.id);
+      if (!row || !batch.includes(n.id)) continue;
+      got.add(n.id);
+      row.commentCount = Number.isSafeInteger(n.comments?.totalCount) ? n.comments.totalCount : null;
+      row.reviewDecision = REVIEW_DECISIONS.includes(n.reviewDecision) ? n.reviewDecision : null;
+      row.mergeState = MERGE_STATES.includes(n.mergeStateStatus) ? n.mergeStateStatus : null;
+    }
+    missing += batch.length - got.size; i += batch.length; size = Math.min(50, size * 2);
+  }
+  return missing;
+}
 const AUTHORED_SCAN_ATTEMPTS = 3;
 async function collectAuthored(reader, login, { now = Date.now() } = {}) {
   if (!validLogin(login)) throw new CollectionError('invalid_login');
   if (!reader.token) return collectSearch(reader, `is:public is:pr is:open author:${login}`, { now });
-  let items, seen, after, pageSize, reported, walked, suppressed, unknownVisibility, complete, reason, attempts = 0;
+  let items, byNodeId, seen, after, pageSize, reported, walked, suppressed, unknownVisibility, complete, reason, attempts = 0;
+  const observedCounts = [];
   // A 2k+ row walk takes minutes, and concurrent PR opens/closes change
   // totalCount. Keep the strict rule (one attempt must observe a stable
   // count) but restart from scratch while the budget can cover another walk.
   do {
   attempts++;
-  items = new Map(); seen = new Set(); after = null; pageSize = 100; reported = null; walked = 0; suppressed = 0; unknownVisibility = 0; complete = false; reason = null;
+  items = new Map(); byNodeId = new Map(); seen = new Set(); after = null; pageSize = 100; reported = null; walked = 0; suppressed = 0; unknownVisibility = 0; complete = false; reason = null;
   try {
     do {
       // A single oversized cursor page can repeatedly 502 even when later
@@ -220,7 +254,7 @@ async function collectAuthored(reader, login, { now = Date.now() } = {}) {
       pageSize = Math.min(100, pageSize * 2);
       const c = data.data?.user?.pullRequests;
       if (!c || !Array.isArray(c.nodes) || !Number.isSafeInteger(c.totalCount) || c.totalCount < 0 || typeof c.pageInfo?.hasNextPage !== 'boolean') throw new CollectionError('invalid_connection');
-      if (reported !== null && reported !== c.totalCount) throw new CollectionError('inventory_changed_during_scan');
+      if (reported !== null && reported !== c.totalCount) { observedCounts.push([reported, c.totalCount, walked]); throw new CollectionError('inventory_changed_during_scan'); }
       reported = c.totalCount;
       for (const node of c.nodes) {
         walked++;
@@ -232,9 +266,9 @@ async function collectAuthored(reader, login, { now = Date.now() } = {}) {
         const repo = node.repository.nameWithOwner;
         if (node.author?.login?.toLowerCase() !== login.toLowerCase() || node.state !== 'OPEN') throw new CollectionError('inventory_scope_mismatch');
         const row = projectSearchRow({ repository_url: `https://api.github.com/repos/${repo}`, number: node.number, title: node.title, html_url: node.url, user: node.author,
-          pull_request: {}, state: 'open', draft: node.isDraft, updated_at: node.updatedAt, comments: node.comments?.totalCount, reviewDecision: node.reviewDecision, mergeState: node.mergeStateStatus });
-        if (!row || items.has(row.id)) throw new CollectionError('inventory_duplicate_or_invalid');
-        items.set(row.id, row);
+          pull_request: {}, state: 'open', draft: node.isDraft, updated_at: node.updatedAt });
+        if (!row || items.has(row.id) || typeof node.id !== 'string' || byNodeId.has(node.id)) throw new CollectionError('inventory_duplicate_or_invalid');
+        items.set(row.id, row); byNodeId.set(node.id, row);
       }
       if (!c.pageInfo?.hasNextPage) { complete = walked === reported && unknownVisibility === 0; if (!complete) reason = unknownVisibility ? 'visibility_unverified' : 'inventory_count_mismatch'; break; }
       const next = c.pageInfo.endCursor;
@@ -244,7 +278,8 @@ async function collectAuthored(reader, login, { now = Date.now() } = {}) {
   } catch (e) { reason = e instanceof CollectionError ? e.code : 'collection_error'; }
   } while (reason === 'inventory_changed_during_scan' && attempts < AUTHORED_SCAN_ATTEMPTS &&
     reader.remaining >= Math.ceil((reported ?? 0) / 100) + 5);
-  return { items: [...items.values()], coverage: { source: 'github-user-pullRequests', scope: 'authored-open-prs', reported, fetched: walked, public: items.size, suppressed, unknownVisibility, complete, reason, attempts } };
+  return { items: [...items.values()], nodeIds: byNodeId, coverage: { source: 'github-user-pullRequests', scope: 'authored-open-prs', reported, fetched: walked, public: items.size, suppressed, unknownVisibility, complete, reason, attempts,
+    observedCounts, enrichmentMissing: null } };
 }
 async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = [], now = Date.now() } = {}) {
   if (!Array.isArray(pins) || pins.length > 500 || pins.some(r => !validRepo(r))) throw new RangeError('pins must contain at most 500 valid repository names');
@@ -296,6 +331,9 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
       unavailablePinReasons.push({ repo, reason: e instanceof CollectionError ? e.code : 'collection_error' });
     }
   }
+  // Enrich last: review/merge state is best-effort and must never starve the
+  // inventory proof (authored, recent, pins) of request budget.
+  if (authored.coverage.complete && authored.nodeIds) authored.coverage.enrichmentMissing = await enrichAuthored(reader, authored.nodeIds);
   const repositories = [...known].sort().map(repo => ({ repo, repoVisibility: 'public', reasons: [authored.items.some(r => r.repo.toLowerCase() === repo) ? 'open-authored-pr' : null,
     recent.items.some(r => r.repo.toLowerCase() === repo) ? 'recent-involvement' : null, pinned.some(r => r.repo.toLowerCase() === repo) ? 'pin' : null].filter(Boolean) }));
   return { items: [...byId.values()], repositories, coverage: { authored: authored.coverage, recent: recent.coverage, pinned,
@@ -521,7 +559,8 @@ async function main() {
     refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted,
     inventoryDiagnostics: {
       authored: { complete: work.coverage.authored?.complete === true, reason: work.coverage.authored?.reason ?? null,
-        reported: work.coverage.authored?.reported ?? null, attempts: work.coverage.authored?.attempts ?? null },
+        reported: work.coverage.authored?.reported ?? null, attempts: work.coverage.authored?.attempts ?? null,
+        observedCounts: work.coverage.authored?.observedCounts ?? [], enrichmentMissing: work.coverage.authored?.enrichmentMissing ?? null },
       recent: { complete: work.coverage.recent?.complete === true, reason: work.coverage.recent?.reason ?? null,
         reported: work.coverage.recent?.reported ?? null, verifiedReported: work.coverage.recent?.verifiedReported ?? null,
         fetched: work.coverage.recent?.fetched ?? null },
