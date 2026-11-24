@@ -57,7 +57,7 @@ jobs:
       - name: Refresh complete public work inventory
         env:
           GITHUB_TOKEN: ${{ secrets.GH_INBOX_TOKEN || github.token }}
-          PUBLIC_READ_REQUEST_LIMIT: "220"
+          PUBLIC_READ_REQUEST_LIMIT: "300"
           PUBLIC_ATTENTION_DEEP_LIMIT: "48"
           PUBLIC_ATTENTION_SEARCH_INTERVAL_MS: "4000"
         run: npm run inbox:public-sync

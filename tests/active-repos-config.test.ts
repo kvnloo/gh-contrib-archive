@@ -18,6 +18,9 @@ test("active repository pins are bounded, unique, and public-safe identifiers", 
   assert.ok(config.pins.includes("bilawalsidhu/gods-eye-view"));
   assert.ok(config.pins.includes("NousResearch/hermes-agent"));
   assert.ok(config.pins.includes("pingdotgg/t3code"));
+  // The reader never follows redirects, so a renamed pin is permanently
+  // unavailable and blocks every Pages publication. Pin canonical names.
+  for (const renamed of ["tester-army/e2e", "NVIDIA/OpenShell"]) assert.equal(config.pins.includes(renamed), false, renamed);
 });
 
 test("observed pins reuse visibility but still scan quiet open work", () => {
