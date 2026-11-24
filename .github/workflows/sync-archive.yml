@@ -41,24 +41,36 @@ jobs:
             exit 1
           fi
           npm run sync:incremental
-      - name: Commit public.db when it changed
+      - name: Publish public.db through a pull request
+        # main requires the "test" check (ruleset ci-required, 2026-11-09), so a direct data push is
+        # rejected. Each run pushes its data commit to a fresh branch and auto-merges a PR once "test"
+        # passes. The PR is opened with GH_ARCHIVE_TOKEN (not GITHUB_TOKEN) so pull_request workflows run.
+        env:
+          GH_TOKEN: ${{ secrets.GH_ARCHIVE_TOKEN }}
         run: |
           git add data/public.db
           if git diff --cached --quiet; then
             echo "public.db unchanged"
             exit 0
           fi
+          cp data/public.db /tmp/public.db.sync
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "sync: refresh public contribution archive"
-          cp data/public.db /tmp/public.db.sync
+          br="sync/archive-${{ github.run_id }}"
           git fetch origin main
-          git checkout -B main origin/main
+          git checkout -B "$br" origin/main
           cp /tmp/public.db.sync data/public.db
           git add data/public.db
           if git diff --cached --quiet; then
-            echo "public.db unchanged after rebase"
+            echo "public.db unchanged against main"
             exit 0
           fi
           git commit -m "sync: refresh public contribution archive"
-          git push origin HEAD:main
+          git push origin "HEAD:refs/heads/$br"
+          # an older unmerged refresh is superseded by this one (same file, newer data)
+          for old in $(gh pr list --state open --search "head:sync/archive-" --json number,headRefName --jq ".[]|select(.headRefName != \"$br\")|.number"); do
+            gh pr close "$old" --delete-branch --comment "Superseded by the refresh from run ${{ github.run_id }}."
+          done
+          gh pr create --base main --head "$br" --title "sync: refresh public contribution archive" \
+            --body "Automated data refresh of data/public.db by the Sync public archive workflow (run ${{ github.run_id }})."
+          gh pr merge "$br" --squash --auto --delete-branch
