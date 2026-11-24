@@ -61,7 +61,8 @@ class GithubReader {
         const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'gh-contrib-archive/covered-read-model', 'X-GitHub-Api-Version': '2022-11-28' };
         if (this.token) headers.Authorization = `Bearer ${this.token}`;
         if (query) headers['Content-Type'] = 'application/json';
-        const r = await this.fetchImpl(target.href, { method: query ? 'POST' : 'GET', headers, redirect: 'error', signal: controller.signal, ...(query ? { body: JSON.stringify({ query, variables }) } : {}) });
+        // Never follow redirects; surface them as http_3xx (e.g. a renamed pin) rather than an opaque network_error.
+        const r = await this.fetchImpl(target.href, { method: query ? 'POST' : 'GET', headers, redirect: 'manual', signal: controller.signal, ...(query ? { body: JSON.stringify({ query, variables }) } : {}) });
         if (!r.ok) {
           const rateLimited = r.status === 429 || (r.status === 403 && (r.headers.get('x-ratelimit-remaining') === '0' || r.headers.has('retry-after')));
           const code = rateLimited ? 'rate_limited' : `http_${r.status}`;
@@ -86,7 +87,12 @@ class GithubReader {
           chunks.push(chunk);
         }
         let data;
-        try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new CollectionError('invalid_json'); }
+        try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch {
+          // Hosted runners intermittently receive a 200 HTML gateway page.
+          // Retry from the same budget; a persistent bad body still fails closed.
+          if (attempt < 2 && this.remaining > 0) { clearTimeout(timer); await this.sleep(1000 * (attempt + 1)); continue; }
+          throw new CollectionError('invalid_json');
+        }
         if (query && data.errors?.length) throw new CollectionError('graphql_error');
         return { data, next: nextLink(r.headers.get('link'), target.href) };
       } catch (e) {
@@ -202,6 +208,9 @@ async function collectAuthored(reader, login, { now = Date.now() } = {}) {
         }
       }
       const { data } = response;
+      // A downshift is per cursor: return toward 100 so one bad page does not
+      // quadruple the request cost of the remaining (2k+ row) inventory.
+      pageSize = Math.min(100, pageSize * 2);
       const c = data.data?.user?.pullRequests;
       if (!c || !Array.isArray(c.nodes) || !Number.isSafeInteger(c.totalCount) || c.totalCount < 0 || typeof c.pageInfo?.hasNextPage !== 'boolean') throw new CollectionError('invalid_connection');
       if (reported !== null && reported !== c.totalCount) throw new CollectionError('inventory_changed_during_scan');
@@ -240,7 +249,7 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
     if (!old || Date.parse(row.updatedAt) > Date.parse(old.updatedAt) || (row.updatedAt === old.updatedAt && row.state !== old.state)) byId.set(row.id, row);
   }
   const known = new Set([...byId.values()].map(row => row.repo.toLowerCase()));
-  const pinned = []; let unavailablePins = 0;
+  const pinned = [], unavailablePinReasons = []; let unavailablePins = 0;
   for (const repo of [...new Set(pins)]) {
     if (!validRepo(repo)) throw new CollectionError('invalid_repo_pin');
     try {
@@ -273,14 +282,15 @@ async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = 
       );
       pinned.push({ repo: canonicalRepo, coverage: result.coverage });
       for (const row of result.items) byId.set(row.id, row);
-    } catch {
+    } catch (e) {
       unavailablePins++;
+      unavailablePinReasons.push({ repo, reason: e instanceof CollectionError ? e.code : 'collection_error' });
     }
   }
   const repositories = [...known].sort().map(repo => ({ repo, repoVisibility: 'public', reasons: [authored.items.some(r => r.repo.toLowerCase() === repo) ? 'open-authored-pr' : null,
     recent.items.some(r => r.repo.toLowerCase() === repo) ? 'recent-involvement' : null, pinned.some(r => r.repo.toLowerCase() === repo) ? 'pin' : null].filter(Boolean) }));
   return { items: [...byId.values()], repositories, coverage: { authored: authored.coverage, recent: recent.coverage, pinned,
-    unavailablePins, complete: authored.coverage.complete && recent.coverage.complete && unavailablePins === 0 && pinned.every(p => p.coverage.complete),
+    unavailablePins, unavailablePinReasons, complete: authored.coverage.complete && recent.coverage.complete && unavailablePins === 0 && pinned.every(p => p.coverage.complete),
     startedAt: new Date(now).toISOString(), recentSince: since, requests: reader.requests } };
 }
 /** Round-robin repos, oldest inspections first. New busy repos cannot starve older ones. */
@@ -506,6 +516,7 @@ async function main() {
         reported: work.coverage.recent?.reported ?? null, verifiedReported: work.coverage.recent?.verifiedReported ?? null,
         fetched: work.coverage.recent?.fetched ?? null },
       unavailablePins: work.coverage.unavailablePins,
+      unavailablePinReasons: work.coverage.unavailablePinReasons,
       pinned: work.coverage.pinned?.map(pin => ({ repo: pin.repo, complete: pin.coverage?.complete === true, reason: pin.coverage?.reason ?? null })) ?? [],
     } }));
 }
