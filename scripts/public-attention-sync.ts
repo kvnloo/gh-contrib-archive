@@ -186,10 +186,17 @@ async function collectSearch(reader, query, { now = Date.now(), start = firstSec
     reason: complete ? null : partitions.find(p => !p.complete)?.reason ?? 'partition_count_mismatch' } };
 }
 const PR_QUERY = `query($login:String!,$after:String,$pageSize:Int!){user(login:$login){pullRequests(first:$pageSize,after:$after,states:OPEN,orderBy:{field:CREATED_AT,direction:ASC}){totalCount pageInfo{hasNextPage endCursor} nodes{number title url state isDraft updatedAt author{login} comments(first:1){totalCount} reviewDecision mergeStateStatus repository{nameWithOwner isPrivate visibility}}}}}`;
+const AUTHORED_SCAN_ATTEMPTS = 3;
 async function collectAuthored(reader, login, { now = Date.now() } = {}) {
   if (!validLogin(login)) throw new CollectionError('invalid_login');
   if (!reader.token) return collectSearch(reader, `is:public is:pr is:open author:${login}`, { now });
-  const items = new Map(), seen = new Set(); let after = null, pageSize = 100, reported = null, walked = 0, suppressed = 0, unknownVisibility = 0, complete = false, reason = null;
+  let items, seen, after, pageSize, reported, walked, suppressed, unknownVisibility, complete, reason, attempts = 0;
+  // A 2k+ row walk takes minutes, and concurrent PR opens/closes change
+  // totalCount. Keep the strict rule (one attempt must observe a stable
+  // count) but restart from scratch while the budget can cover another walk.
+  do {
+  attempts++;
+  items = new Map(); seen = new Set(); after = null; pageSize = 100; reported = null; walked = 0; suppressed = 0; unknownVisibility = 0; complete = false; reason = null;
   try {
     do {
       // A single oversized cursor page can repeatedly 502 even when later
@@ -235,7 +242,9 @@ async function collectAuthored(reader, login, { now = Date.now() } = {}) {
       seen.add(next); after = next;
     } while (true);
   } catch (e) { reason = e instanceof CollectionError ? e.code : 'collection_error'; }
-  return { items: [...items.values()], coverage: { source: 'github-user-pullRequests', scope: 'authored-open-prs', reported, fetched: walked, public: items.size, suppressed, unknownVisibility, complete, reason } };
+  } while (reason === 'inventory_changed_during_scan' && attempts < AUTHORED_SCAN_ATTEMPTS &&
+    reader.remaining >= Math.ceil((reported ?? 0) / 100) + 5);
+  return { items: [...items.values()], coverage: { source: 'github-user-pullRequests', scope: 'authored-open-prs', reported, fetched: walked, public: items.size, suppressed, unknownVisibility, complete, reason, attempts } };
 }
 async function discoverWork(reader, { login = 'kvnloo', recentDays = 60, pins = [], now = Date.now() } = {}) {
   if (!Array.isArray(pins) || pins.length > 500 || pins.some(r => !validRepo(r))) throw new RangeError('pins must contain at most 500 valid repository names');
@@ -511,7 +520,8 @@ async function main() {
     repositories: work.repositories.length, threads: result.items.length, requests: reader.requests,
     refreshed: result.refreshed, cacheHits: result.cacheHits, cacheBytes: result.cacheBytes, cacheEvicted: result.cacheEvicted,
     inventoryDiagnostics: {
-      authored: { complete: work.coverage.authored?.complete === true, reason: work.coverage.authored?.reason ?? null },
+      authored: { complete: work.coverage.authored?.complete === true, reason: work.coverage.authored?.reason ?? null,
+        reported: work.coverage.authored?.reported ?? null, attempts: work.coverage.authored?.attempts ?? null },
       recent: { complete: work.coverage.recent?.complete === true, reason: work.coverage.recent?.reason ?? null,
         reported: work.coverage.recent?.reported ?? null, verifiedReported: work.coverage.recent?.verifiedReported ?? null,
         fetched: work.coverage.recent?.fetched ?? null },
